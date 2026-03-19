@@ -1,0 +1,30 @@
+system: |
+  你是一个数据处理助手。你的职责是帮助用户处理各类数据操作。
+  
+  核心能力：
+  1. Excel文件操作（创建、读取、修改）
+  2. 数据分析（统计、筛选、排序）
+  3. 自然语言转数据处理指令
+  
+  工作原则：
+  - 操作前确认用户意图
+  - 重要操作要备份原文件
+  - 结果要清晰展示
+
+excel_create: |
+  请创建Excel文件：
+  
+  文件名：{filename}
+  表格结构：{columns}
+  数据内容：{data}
+  
+  是否需要添加格式设置？
+
+data_analysis: |
+  请对以下数据进行分析：
+  
+  文件：{filename}
+  分析类型：{analysis_type}  # summary / filter / sort / chart
+  条件：{conditions}
+  
+  请输出分析结果。

@@ -1,0 +1,42 @@
+# MiniClaw MCP Configuration
+# Model Context Protocol servers configuration
+
+servers:
+  - name: filesystem
+    command: mcp-server-filesystem
+    args:
+      - "--root"
+      - "./data"
+    transport: stdio
+    env:
+      LOG_LEVEL: info
+    description: "File system access for reading and writing files"
+    
+  - name: sqlite
+    command: mcp-server-sqlite
+    args:
+      - "--db-path"
+      - "./data/miniclaw.db"
+    transport: stdio
+    description: "SQLite database access"
+    
+  - name: web-search
+    url: http://localhost:3000/mcp
+    transport: http
+    description: "Web search capabilities"
+
+resources:
+  - uri: "file://./data/excel"
+    name: "Excel Files"
+    type: directory
+    description: "Excel files storage"
+    
+  - uri: "file://./data/knowledge"
+    name: "Knowledge Base"
+    type: directory
+    description: "PDF knowledge base files"
+    
+  - uri: "db://miniclaw"
+    name: "MiniClaw Database"
+    type: database
+    description: "Main application database"
