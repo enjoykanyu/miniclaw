@@ -92,7 +92,7 @@ def interactive(
 @app.command()
 def serve(
     host: str = typer.Option("0.0.0.0", "--host", "-h", help="Host to bind"),
-    port: int = typer.Option(8000, "--port", "-p", help="Port to bind"),
+    port: int = typer.Option(9190, "--port", "-p", help="Port to bind"),
     reload: bool = typer.Option(False, "--reload", "-r", help="Enable auto-reload"),
 ):
     """Start the FastAPI server."""
