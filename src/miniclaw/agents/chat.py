@@ -1,9 +1,9 @@
 """
-MiniClaw Chat Agent
+MiniClaw Chat Agent - Worker Agent
 Handles general conversation and fallback responses
 """
 
-from miniclaw.agents.base import BaseAgent
+from miniclaw.agents.worker import WorkerAgent
 
 
 CHAT_SYSTEM_PROMPT = """你是MiniClaw，一个友好、智能的个人助手。
@@ -26,9 +26,9 @@ CHAT_SYSTEM_PROMPT = """你是MiniClaw，一个友好、智能的个人助手。
 """
 
 
-class ChatAgent(BaseAgent):
+class ChatAgent(WorkerAgent):
     """
-    日常聊天智能体
+    日常聊天 Worker Agent
 
     功能：
     - 处理一般对话
@@ -36,11 +36,11 @@ class ChatAgent(BaseAgent):
     - 作为默认 fallback Agent
     """
 
-    name = "chat_agent"
+    name = "chat"
     description = "日常聊天助手，处理一般对话和引导用户使用功能"
 
     def __init__(self, llm=None, tools=None):
-        super().__init__(llm=llm, tools=tools)
+        super().__init__(llm=llm, tools=tools or [])
 
     def _get_system_prompt(self) -> str:
         """获取聊天助手的系统提示词"""

@@ -1,5 +1,5 @@
 """
-MiniClaw Info Agent
+MiniClaw Info Agent - Worker Agent
 Handles weather queries, news fetching, and knowledge Q&A
 """
 
@@ -7,7 +7,7 @@ from typing import Optional, Any
 
 from langchain_core.tools import tool
 
-from miniclaw.agents.base import BaseAgent
+from miniclaw.agents.worker import WorkerAgent
 from miniclaw.utils.helpers import load_prompt_template
 
 
@@ -66,9 +66,9 @@ def search_knowledge(query: str) -> str:
     return f"知识库搜索结果: 关于 '{query}' 的相关信息暂未找到，请尝试其他关键词。"
 
 
-class InfoAgent(BaseAgent):
+class InfoAgent(WorkerAgent):
     """
-    信息获取智能体
+    信息获取 Worker Agent
 
     功能：
     - 查询天气信息
@@ -76,7 +76,7 @@ class InfoAgent(BaseAgent):
     - 知识库搜索
     """
 
-    name = "info_agent"
+    name = "info"
     description = "信息获取助手，查询天气、推送新闻、知识问答"
 
     def __init__(self, llm=None, tools=None, use_react: bool = False):
@@ -97,11 +97,7 @@ class InfoAgent(BaseAgent):
 请提供准确、及时的信息。""")
 
     def format_tool_result(self, tool_name: str, result: Any) -> Optional[str]:
-        """
-        自定义工具结果格式化
-
-        针对信息获取工具的特殊格式化
-        """
+        """自定义工具结果格式化"""
         if tool_name == "get_weather" and isinstance(result, dict):
             if "error" in result:
                 return f"❌ {result.get('message', '无法获取天气信息')}"
@@ -111,7 +107,6 @@ class InfoAgent(BaseAgent):
             condition = result.get('condition', 'N/A')
             humidity = result.get('humidity', 'N/A')
 
-            # 天气表情
             weather_emoji = {
                 "晴": "☀️", "多云": "⛅", "阴": "☁️",
                 "雨": "🌧️", "雪": "❄️", "雷": "⛈️"
@@ -141,7 +136,6 @@ class InfoAgent(BaseAgent):
             if not result:
                 return "📰 暂无新闻"
 
-            # 检查是否有错误
             if len(result) == 1 and isinstance(result[0], dict) and "error" in result[0]:
                 return f"❌ {result[0].get('message', '无法获取新闻')}"
 
@@ -159,5 +153,4 @@ class InfoAgent(BaseAgent):
         elif tool_name == "search_knowledge":
             return str(result)
 
-        # 返回 None 使用默认格式化
         return None

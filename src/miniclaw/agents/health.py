@@ -1,5 +1,5 @@
 """
-MiniClaw Health Agent
+MiniClaw Health Agent - Worker Agent
 Handles health reminders, break notifications, and wellness tips
 """
 
@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from langchain_core.tools import tool
 
-from miniclaw.agents.base import BaseAgent
+from miniclaw.agents.worker import WorkerAgent
 from miniclaw.utils.helpers import load_prompt_template, format_datetime
 
 
@@ -100,9 +100,9 @@ def get_health_tips(situation: str) -> str:
     return tips.get(situation, "保持健康的生活习惯，定时休息，多喝水！")
 
 
-class HealthAgent(BaseAgent):
+class HealthAgent(WorkerAgent):
     """
-    健康提醒智能体
+    健康提醒 Worker Agent
 
     功能：
     - 设置健康提醒（站立、喝水、眼保健操）
@@ -110,7 +110,7 @@ class HealthAgent(BaseAgent):
     - 提供健康建议
     """
 
-    name = "health_agent"
+    name = "health"
     description = "健康提醒助手，定时提醒休息、管理作息、提供健康建议"
 
     def __init__(self, llm=None, tools=None, use_react: bool = False):
@@ -131,11 +131,7 @@ class HealthAgent(BaseAgent):
 请关注用户的身心健康。""")
 
     def format_tool_result(self, tool_name: str, result: Any) -> Optional[str]:
-        """
-        自定义工具结果格式化
-
-        针对健康提醒工具的特殊格式化
-        """
+        """自定义工具结果格式化"""
         if tool_name == "set_reminder" and isinstance(result, dict):
             if "error" in result:
                 return f"❌ 设置提醒失败: {result.get('message', '未知错误')}"
@@ -164,5 +160,4 @@ class HealthAgent(BaseAgent):
         elif tool_name == "get_health_tips":
             return f"💡 健康建议:\n{result}"
 
-        # 返回 None 使用默认格式化
         return None

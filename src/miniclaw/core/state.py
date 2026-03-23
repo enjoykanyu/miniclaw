@@ -42,25 +42,28 @@ class MiniClawState(TypedDict):
     messages: Annotated[list, add_messages]
     user_id: str
     session_id: str
-    
+
+    # Supervisor 路由相关
+    next_agent: Optional[str]  # Supervisor 决定的下一个 Agent
+
     intent: Optional[str]
     current_agent: Optional[str]
     agent_response: Optional[str]
-    
+
     task_context: Optional[dict]
     current_tasks: Optional[List[TaskItem]]
-    
+
     learning_progress: Optional[LearningProgress]
     study_plans: Optional[List[dict]]
-    
+
     reminders: Optional[List[ReminderItem]]
-    
+
     weather_info: Optional[dict]
     news_items: Optional[List[dict]]
-    
+
     excel_files: Optional[List[str]]
     current_excel: Optional[str]
-    
+
     metadata: Optional[dict]
     created_at: Optional[str]
     updated_at: Optional[str]
@@ -72,6 +75,7 @@ def create_initial_state(user_id: str, session_id: str) -> MiniClawState:
         messages=[],
         user_id=user_id,
         session_id=session_id,
+        next_agent=None,
         intent=None,
         current_agent=None,
         agent_response=None,

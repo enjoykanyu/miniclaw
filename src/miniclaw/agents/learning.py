@@ -1,5 +1,5 @@
 """
-MiniClaw Learning Agent
+MiniClaw Learning Agent - Worker Agent
 Handles study planning, progress tracking, and quiz generation
 """
 
@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from langchain_core.tools import tool
 
-from miniclaw.agents.base import BaseAgent
+from miniclaw.agents.worker import WorkerAgent
 from miniclaw.utils.helpers import load_prompt_template, format_datetime
 
 
@@ -104,9 +104,9 @@ def schedule_review(plan_id: str, stage: int) -> dict:
     }
 
 
-class LearningAgent(BaseAgent):
+class LearningAgent(WorkerAgent):
     """
-    学习规划智能体
+    学习规划 Worker Agent
 
     功能：
     - 制定学习计划
@@ -114,7 +114,7 @@ class LearningAgent(BaseAgent):
     - 安排艾宾浩斯复习
     """
 
-    name = "learning_agent"
+    name = "learning"
     description = "学习规划助手，帮助制定学习计划、追踪进度、安排复习"
 
     def __init__(self, llm=None, tools=None, use_react: bool = False):
@@ -135,11 +135,7 @@ class LearningAgent(BaseAgent):
 请帮助用户高效、系统地学习。""")
 
     def format_tool_result(self, tool_name: str, result: Any) -> Optional[str]:
-        """
-        自定义工具结果格式化
-
-        针对学习规划工具的特殊格式化
-        """
+        """自定义工具结果格式化"""
         if tool_name == "create_study_plan" and isinstance(result, dict):
             if "error" in result:
                 return f"❌ 创建学习计划失败: {result.get('message', '未知错误')}"
@@ -185,5 +181,4 @@ class LearningAgent(BaseAgent):
 
             return "\n".join(lines)
 
-        # 返回 None 使用默认格式化
         return None

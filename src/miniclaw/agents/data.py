@@ -1,5 +1,5 @@
 """
-MiniClaw Data Agent
+MiniClaw Data Agent - Worker Agent
 Handles Excel operations and data processing
 """
 
@@ -7,7 +7,7 @@ from typing import Optional, List, Any
 
 from langchain_core.tools import tool
 
-from miniclaw.agents.base import BaseAgent
+from miniclaw.agents.worker import WorkerAgent
 from miniclaw.utils.helpers import load_prompt_template
 
 
@@ -98,9 +98,9 @@ def update_excel_cell(filename: str, row: int, column: str, value: str) -> str:
         return f"❌ 更新失败: {str(e)}"
 
 
-class DataAgent(BaseAgent):
+class DataAgent(WorkerAgent):
     """
-    数据处理智能体
+    数据处理 Worker Agent
 
     功能：
     - 创建 Excel 文件
@@ -109,7 +109,7 @@ class DataAgent(BaseAgent):
     - 更新单元格
     """
 
-    name = "data_agent"
+    name = "data"
     description = "数据处理助手，操作Excel表格、数据分析、自然语言转数据操作"
 
     def __init__(self, llm=None, tools=None, use_react: bool = False):
@@ -131,22 +131,5 @@ class DataAgent(BaseAgent):
 请帮助用户高效地处理数据。""")
 
     def format_tool_result(self, tool_name: str, result: Any) -> Optional[str]:
-        """
-        自定义工具结果格式化
-
-        针对数据处理工具的特殊格式化
-        """
-        if tool_name == "create_excel_file":
-            return str(result)
-
-        elif tool_name == "read_excel_file":
-            return str(result)
-
-        elif tool_name == "analyze_data":
-            return str(result)
-
-        elif tool_name == "update_excel_cell":
-            return str(result)
-
-        # 返回 None 使用默认格式化
+        """自定义工具结果格式化"""
         return None

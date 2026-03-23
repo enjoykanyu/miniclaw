@@ -1,5 +1,5 @@
 """
-MiniClaw Task Agent
+MiniClaw Task Agent - Worker Agent
 Handles TODO list management, task creation, and daily summaries
 """
 
@@ -8,7 +8,7 @@ from datetime import datetime
 
 from langchain_core.tools import tool
 
-from miniclaw.agents.base import BaseAgent
+from miniclaw.agents.worker import WorkerAgent
 from miniclaw.utils.helpers import load_prompt_template, format_datetime
 
 
@@ -86,16 +86,16 @@ def generate_daily_summary(date: str) -> dict:
     }
 
 
-class TaskAgent(BaseAgent):
+class TaskAgent(WorkerAgent):
     """
-    任务管理智能体
+    任务管理 Worker Agent
 
     功能：
     - 创建、列出、完成任务
     - 生成每日任务报告
     """
 
-    name = "task_agent"
+    name = "task"
     description = "任务管理助手，管理TODO清单、创建任务、生成每日报告"
 
     def __init__(self, llm=None, tools=None, use_react: bool = False):
@@ -117,11 +117,7 @@ class TaskAgent(BaseAgent):
 请友好、高效地帮助用户管理任务。""")
 
     def format_tool_result(self, tool_name: str, result: Any) -> Optional[str]:
-        """
-        自定义工具结果格式化
-
-        针对任务管理工具的特殊格式化
-        """
+        """自定义工具结果格式化"""
         if tool_name == "create_task" and isinstance(result, dict):
             if "error" in result:
                 return f"❌ 创建任务失败: {result.get('message', '未知错误')}"
@@ -166,5 +162,4 @@ class TaskAgent(BaseAgent):
             ]
             return "\n".join(lines)
 
-        # 返回 None 使用默认格式化
         return None
