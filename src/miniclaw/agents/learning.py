@@ -3,35 +3,32 @@ MiniClaw Learning Agent
 Handles study planning, progress tracking, and quiz generation
 """
 
-from typing import List, Optional
+from typing import List, Optional, Any
 from datetime import datetime, timedelta
 
-from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
 
 from miniclaw.agents.base import BaseAgent
-from miniclaw.core.state import MiniClawState
 from miniclaw.utils.helpers import load_prompt_template, format_datetime
-from miniclaw.utils.llm import get_smart_llm
 
 
 @tool
 def create_study_plan(goal: str, duration: str, daily_hours: int, mode: str) -> dict:
     """
     Create a study plan based on user's learning goal.
-    
+
     Args:
         goal: The learning goal (e.g., "Learn Python programming")
         duration: Time range (e.g., "2 weeks", "1 month")
         daily_hours: Available hours per day for study
         mode: Learning mode - "daily", "intensive", or "longterm"
-    
+
     Returns:
         A structured study plan with stages and tasks
     """
     stages = []
     total_days = 14 if "week" in duration.lower() else 30
-    
+
     if "python" in goal.lower():
         stages = [
             {"name": "基础语法", "days": total_days // 4, "tasks": ["变量与数据类型", "控制流", "函数", "模块"]},
@@ -45,7 +42,7 @@ def create_study_plan(goal: str, duration: str, daily_hours: int, mode: str) -> 
             {"name": "进阶阶段", "days": total_days // 3, "tasks": ["深入理解", "实践应用"]},
             {"name": "巩固阶段", "days": total_days // 3, "tasks": ["复习总结", "项目实战"]},
         ]
-    
+
     return {
         "goal": goal,
         "duration": duration,
@@ -61,16 +58,16 @@ def create_study_plan(goal: str, duration: str, daily_hours: int, mode: str) -> 
 def generate_excel_plan(plan: dict, filename: str) -> str:
     """
     Generate an Excel file from the study plan.
-    
+
     Args:
         plan: The study plan dictionary
         filename: Output filename (without extension)
-    
+
     Returns:
         Path to the generated Excel file
     """
     from miniclaw.tools.excel import create_study_excel
-    
+
     filepath = create_study_excel(plan, filename)
     return f"学习计划已生成: {filepath}"
 
@@ -79,18 +76,18 @@ def generate_excel_plan(plan: dict, filename: str) -> str:
 def schedule_review(plan_id: str, stage: int) -> dict:
     """
     Schedule review sessions based on Ebbinghaus forgetting curve.
-    
+
     Args:
         plan_id: The study plan ID
         stage: Current stage number
-    
+
     Returns:
         Review schedule with recommended dates
     """
     now = datetime.now()
-    
+
     review_intervals = [1, 2, 4, 7, 15, 30]
-    
+
     reviews = []
     for i, days in enumerate(review_intervals):
         review_date = now + timedelta(days=days)
@@ -99,7 +96,7 @@ def schedule_review(plan_id: str, stage: int) -> dict:
             "date": format_datetime(review_date, "%Y-%m-%d"),
             "interval_days": days,
         })
-    
+
     return {
         "plan_id": plan_id,
         "stage": stage,
@@ -108,40 +105,85 @@ def schedule_review(plan_id: str, stage: int) -> dict:
 
 
 class LearningAgent(BaseAgent):
+    """
+    学习规划智能体
+
+    功能：
+    - 制定学习计划
+    - 生成 Excel 学习计划表
+    - 安排艾宾浩斯复习
+    """
+
     name = "learning_agent"
     description = "学习规划助手，帮助制定学习计划、追踪进度、安排复习"
-    
-    def __init__(self, llm=None, tools=None):
+
+    def __init__(self, llm=None, tools=None, use_react: bool = False):
         if tools is None:
             tools = [create_study_plan, generate_excel_plan, schedule_review]
-        super().__init__(llm=llm, tools=tools)
+        super().__init__(llm=llm, tools=tools, use_react=use_react)
         self._prompts = load_prompt_template("learning")
-    
-    async def process(self, state: MiniClawState) -> str:
-        user_message = self.get_last_user_message(state)
-        
-        system_prompt = self._prompts.get("system", "")
-        
-        llm_with_tools = self.bind_tools()
-        
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_message),
-        ]
-        
-        response = await llm_with_tools.ainvoke(messages)
-        
-        if hasattr(response, "tool_calls") and response.tool_calls:
-            tool_messages = []
-            for tool_call in response.tool_calls:
-                tool_name = tool_call["name"]
-                tool_args = tool_call["args"]
-                
-                for tool in self._tools:
-                    if tool.name == tool_name:
-                        result = tool.invoke(tool_args)
-                        tool_messages.append(f"[{tool_name}] {result}")
-            
-            return "\n".join(tool_messages) if tool_messages else response.content
-        
-        return response.content
+
+    def _get_system_prompt(self) -> str:
+        """获取学习规划的系统提示词"""
+        return self._prompts.get("system", """你是学习规划助手，帮助用户制定学习计划和管理学习进度。
+
+你可以：
+1. 根据学习目标制定详细的学习计划
+2. 生成 Excel 格式的学习计划表
+3. 基于艾宾浩斯遗忘曲线安排复习计划
+
+请帮助用户高效、系统地学习。""")
+
+    def format_tool_result(self, tool_name: str, result: Any) -> Optional[str]:
+        """
+        自定义工具结果格式化
+
+        针对学习规划工具的特殊格式化
+        """
+        if tool_name == "create_study_plan" and isinstance(result, dict):
+            if "error" in result:
+                return f"❌ 创建学习计划失败: {result.get('message', '未知错误')}"
+
+            lines = [
+                f"📚 学习计划: {result.get('goal', '未命名')}",
+                f"",
+                f"⏱️ 学习周期: {result.get('duration', '未设置')} ({result.get('total_days', 0)}天)",
+                f"📅 每日学习: {result.get('daily_hours', 0)} 小时",
+                f"🎯 学习模式: {result.get('mode', 'daily')}",
+                f"",
+                "📋 学习阶段:",
+            ]
+
+            for i, stage in enumerate(result.get('stages', []), 1):
+                stage_name = stage.get('name', f'阶段{i}')
+                days = stage.get('days', 0)
+                tasks = stage.get('tasks', [])
+                lines.append(f"  {i}. {stage_name} ({days}天)")
+                for task in tasks:
+                    lines.append(f"     - {task}")
+
+            return "\n".join(lines)
+
+        elif tool_name == "generate_excel_plan":
+            return f"📊 {result}"
+
+        elif tool_name == "schedule_review" and isinstance(result, dict):
+            if "error" in result:
+                return f"❌ 安排复习失败: {result.get('message', '未知错误')}"
+
+            lines = [
+                f"🔄 艾宾浩斯复习计划",
+                f"",
+                f"计划ID: {result.get('plan_id', 'N/A')}",
+                f"当前阶段: {result.get('stage', 1)}",
+                f"",
+                "📅 复习时间表:",
+            ]
+
+            for review in result.get('review_schedule', []):
+                lines.append(f"  第{review.get('review_num')}次复习: {review.get('date')} (间隔{review.get('interval_days')}天)")
+
+            return "\n".join(lines)
+
+        # 返回 None 使用默认格式化
+        return None
