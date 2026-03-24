@@ -16,6 +16,7 @@ from langgraph.types import Command
 
 from miniclaw.core.state import MiniClawState
 from miniclaw.utils.llm import get_llm, get_smart_llm
+from miniclaw.mcp.tools import mcp_tool_registry
 
 
 class WorkerAgent(ABC):
@@ -74,7 +75,17 @@ class WorkerAgent(ABC):
         return self._llm
 
     def get_tools(self) -> List[BaseTool]:
-        return self._tools
+        """获取工具列表，包括本地工具和 MCP 工具"""
+        tools = list(self._tools)
+        
+        # 添加 MCP 工具
+        try:
+            mcp_tools = mcp_tool_registry.get_all_tools()
+            tools.extend(mcp_tools)
+        except Exception:
+            pass
+        
+        return tools
 
     def bind_tools(self) -> Any:
         if self._tools:
