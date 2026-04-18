@@ -3,6 +3,10 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import tool
 from dotenv import load_dotenv
+from langgraph.graph import StateGraph, END
+from langgraph.graph.message import add_messages
+from typing import Annotated, TypedDict
+import operator
 import os
 # ─── 1. 定义工具 ───
 @tool
@@ -71,6 +75,51 @@ async def agent_loop(user_input: str, max_turns: int = 10):
 
     return "达到最大轮次限制"
 
+
+
+class AgentState(TypedDict):
+    messages: Annotated[list, add_messages]
+    turns: Annotated[int, operator.add]
+
+def call_model(state):
+    response = llm_with_tools.invoke(state["messages"])
+    return {"messages": [response], "turns": 1}
+
+def execute_tools(state):
+    """执行工具调用"""
+    last = state["messages"][-1]   
+    print(f"🔧 模型决定调用 {len(last.tool_calls)} 个工具:")
+    results = []
+    for tc in last.tool_calls:
+        selected = next(t for t in tools if t.name == tc["name"])
+        print(f"   → {tc['name']}({tc['args']})工具 {selected.name}")
+        result = selected.invoke(tc["args"])
+        results.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
+    return {"messages": results}
+
+def should_continue(state):
+    last = state["messages"][-1]
+    return "tools" if hasattr(last, 'tool_calls') and last.tool_calls else END
+#编排图节点
+graph = StateGraph(AgentState) # 创建图，指定状态类型为 AgentState
+graph.add_node("model", call_model) # 添加 model 节点
+graph.add_node("tools", execute_tools) # 添加 tools 节点
+graph.set_entry_point("model") # 设置入口点为 model
+graph.add_conditional_edges("model", should_continue, {"tools": "tools", END: END}) # 添加条件边，根据 should_continue 判断是否继续调用 tools
+graph.add_edge("tools", "model") #增加边 tools 节点执行完后， 无条件 回到 model
+app = graph.compile() # 编译图 把声明式的图编译成可执行的 app
+
+def chat(user_input: str) -> str:
+    """与助手对话"""
+    print(f"\n👤 用户：{user_input}")
+    
+    messages = [HumanMessage(content=user_input)]
+    result = app.invoke({"messages": messages})
+    
+    return result["messages"][-1].content
 # ─── 3. 运行 ───
 if __name__ == "__main__":
-    asyncio.run(agent_loop("北京和上海的天气怎么样？另外帮我算一下 123*456"))
+    # asyncio.run(agent_loop("北京和上海的天气怎么样？另外帮我算一下 123*456"))
+    # print(chat("北京和上海的天气怎么样？另外帮我算一下 2的32次方"))
+    result = chat("帮我算 123*900等于多少呢")
+    print(result)
