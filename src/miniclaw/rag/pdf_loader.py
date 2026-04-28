@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 import re
 
 from miniclaw.config.settings import settings
-from miniclaw.rag.vectorstore import Document, get_vectorstore
+from miniclaw.rag.types import Document
+from miniclaw.rag.vectorstore import get_vectorstore
 
 
 @dataclass
