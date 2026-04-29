@@ -57,11 +57,19 @@ def interactive(
     """Start an interactive chat session with MiniClaw."""
     init_data_dirs()
     
-    console.print(Panel.fit(
-        "[bold blue]MiniClaw Personal Assistant[/bold blue]\n"
-        "Type 'exit' or 'quit' to end the session",
-        border_style="blue",
-    ))
+    # ASCII Art Banner
+    banner = """
+[bold cyan]    __  __ _       _      _                 [/bold cyan]
+[bold cyan]   |  \/  (_)     (_)    | |                [/bold cyan]
+[bold cyan]   | .  . |_ _ __  _  ___| | __             [/bold cyan]
+[bold cyan]   | |\/| | | '_ \| |/ __| |/ /             [/bold cyan]
+[bold cyan]   | |  | | | | | | | (__|   <              [/bold cyan]
+[bold cyan]   \_|  |_/_|_| |_|_|\___|_|\_\             [/bold cyan]
+[bold cyan]                                            [/bold cyan]
+[bold green]   🤖 Personal AI Assistant[/bold green]               
+[dim]   Type 'exit' or 'quit' to end session[/dim]
+    """
+    console.print(banner)
     
     app_instance = MiniClawApp()
     session_id = "cli_session"
@@ -77,16 +85,36 @@ def interactive(
             continue
         
         try:
-            response = asyncio.run(
-                app_instance.chat(
+            # 使用流式输出
+            console.print("[bold blue]MiniClaw:[/bold blue] ", end="")
+            
+            async def stream_response():
+                async for event in app_instance.stream(
                     message=user_input,
                     user_id=user_id,
                     session_id=session_id,
-                )
-            )
-            console.print(Panel(response, border_style="blue"))
+                ):
+                    # 处理 astream_events 返回的事件
+                    if isinstance(event, dict):
+                        event_type = event.get("event")
+                        # 只处理聊天模型的流式输出
+                        if event_type == "on_chat_model_stream":
+                            data = event.get("data", {})
+                            chunk = data.get("chunk", {})
+                            if hasattr(chunk, "content"):
+                                content = chunk.content
+                                if content:
+                                    console.print(content, end="")
+                            elif isinstance(chunk, dict):
+                                content = chunk.get("content", "")
+                                if content:
+                                    console.print(content, end="")
+                console.print()  # 换行
+            
+            asyncio.run(stream_response())
+            
         except Exception as e:
-            console.print(f"[red]Error: {str(e)}[/red]")
+            console.print(f"\n[red]Error: {str(e)}[/red]")
 
 
 @app.command()
