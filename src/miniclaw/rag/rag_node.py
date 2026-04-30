@@ -1,0 +1,205 @@
+"""
+MiniClaw RAG Node — LangGraph 中的 RAG 节点
+
+参考:
+  - agent-service-toolkit: 三节点线性流程 (retrieve → augment → generate)
+  - SuperMew: 四节点条件分支 (retrieve → grade → rewrite/answer)
+  - deer-flow: Middleware 链注入模式
+
+RAG 节点流程:
+  1. rag_detect_node — 自动识别是否需要 RAG 检索
+  2. rag_retrieve_node — 执行混合检索 (Dense + BM25 + RRF)
+  3. rag_generate_node — 基于检索结果生成回答
+
+集成方式:
+  方式一 (Node-based): 在 LangGraph 中添加 RAG 节点
+  方式二 (Tool-based): Agent 通过 rag_search 工具调用
+"""
+
+from typing import Dict, Any, List, Optional
+import logging
+
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+
+from miniclaw.core.state import MiniClawState
+from miniclaw.rag.service import get_rag_service
+from miniclaw.rag.retriever import HybridRetriever, SearchMode, FusionMethod
+from miniclaw.rag.types import RetrievalResult
+
+logger = logging.getLogger(__name__)
+
+RAG_KEYWORDS = [
+    "知识库", "文档", "资料", "文件", "PDF", "pdf",
+    "文章", "论文", "报告", "手册", "指南", "教程",
+    "查找", "搜索", "检索", "查询", "找一下",
+    "帮我查", "有没有", "关于", "相关",
+    "what is", "how to", "explain", "find", "search",
+    "document", "knowledge", "reference",
+]
+
+RAG_SYSTEM_PROMPT = """你是一个知识库问答助手。请基于以下检索到的参考资料回答用户的问题。
+
+要求：
+1. 优先使用参考资料中的信息回答
+2. 如果参考资料不足以回答问题，请明确说明
+3. 引用来源时标注 [来源X]
+4. 不要编造参考资料中没有的信息
+
+参考资料：
+{context}"""
+
+
+def detect_rag_need(query: str, strategy: str = "hybrid") -> bool:
+    """
+    自动识别是否需要 RAG 检索
+
+    策略:
+      - keyword: 关键词匹配（快速，零成本）
+      - hybrid: 关键词 + 启发式规则（推荐）
+      - llm: LLM 分类（最准确，有成本）
+    """
+    if strategy == "keyword":
+        return _keyword_detect(query)
+    elif strategy == "llm":
+        return _keyword_detect(query)
+    else:
+        return _hybrid_detect(query)
+
+
+def _keyword_detect(query: str) -> bool:
+    query_lower = query.lower()
+    return any(kw in query_lower for kw in RAG_KEYWORDS)
+
+
+def _hybrid_detect(query: str) -> bool:
+    if _keyword_detect(query):
+        return True
+
+    rag_context_patterns = ["文档说", "资料中", "文件里", "书上", "论文中", "手册里"]
+    if any(p in query for p in rag_context_patterns):
+        return True
+
+    return False
+
+
+async def rag_detect_node(state: MiniClawState) -> Dict[str, Any]:
+    """
+    RAG 检测节点 — 判断当前查询是否需要知识库检索
+
+    输入: state.messages (用户消息)
+    输出: state.needs_rag (True/False)
+    """
+    messages = state.get("messages", [])
+    if not messages:
+        return {"needs_rag": False}
+
+    last_human_msg = None
+    for msg in reversed(messages):
+        if isinstance(msg, HumanMessage):
+            last_human_msg = msg.content
+            break
+
+    if not last_human_msg:
+        return {"needs_rag": False}
+
+    needs_rag = detect_rag_need(last_human_msg, strategy="hybrid")
+    return {"needs_rag": needs_rag}
+
+
+async def rag_retrieve_node(state: MiniClawState) -> Dict[str, Any]:
+    """
+    RAG 检索节点 — 执行混合检索
+
+    输入: state.messages + state.needs_rag
+    输出: state.rag_context + state.rag_sources
+    """
+    messages = state.get("messages", [])
+    if not messages:
+        return {"rag_context": "", "rag_sources": []}
+
+    last_human_msg = None
+    for msg in reversed(messages):
+        if isinstance(msg, HumanMessage):
+            last_human_msg = msg.content
+            break
+
+    if not last_human_msg:
+        return {"rag_context": "", "rag_sources": []}
+
+    rag_service = get_rag_service()
+    kb_names = rag_service.list_kbs()
+
+    if not kb_names:
+        return {"rag_context": "", "rag_sources": []}
+
+    all_results: List[RetrievalResult] = []
+    for kb_name in kb_names:
+        try:
+            kb = rag_service.get_kb(kb_name)
+            if kb is None:
+                continue
+            results = kb.search(last_human_msg, k=3)
+            all_results.extend(results)
+        except Exception as e:
+            logger.error(f"RAG search failed for KB '{kb_name}': {e}")
+
+    all_results.sort(key=lambda r: r.score, reverse=True)
+    top_results = all_results[:5]
+
+    if not top_results:
+        return {"rag_context": "", "rag_sources": []}
+
+    context_parts = []
+    sources = []
+    for i, result in enumerate(top_results):
+        context_parts.append(f"[来源{i+1}: {result.source} (相关度:{result.score:.2f})]\n{result.content}")
+        sources.append({
+            "source": result.source,
+            "score": result.score,
+            "content_preview": result.content[:100],
+        })
+
+    context = "\n\n".join(context_parts)
+    return {"rag_context": context, "rag_sources": sources}
+
+
+async def rag_generate_node(state: MiniClawState) -> Dict[str, Any]:
+    """
+    RAG 生成节点 — 基于检索结果生成回答
+
+    输入: state.messages + state.rag_context
+    输出: state.agent_response (更新 messages)
+    """
+    rag_context = state.get("rag_context", "")
+    if not rag_context:
+        return {"agent_response": "抱歉，知识库中未找到相关信息。"}
+
+    messages = state.get("messages", [])
+    user_query = ""
+    for msg in reversed(messages):
+        if isinstance(msg, HumanMessage):
+            user_query = msg.content
+            break
+
+    system_prompt = RAG_SYSTEM_PROMPT.format(context=rag_context)
+
+    from miniclaw.config.settings import settings
+    from miniclaw.llm.factory import create_llm
+
+    try:
+        llm = create_llm()
+        response = await llm.ainvoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_query),
+        ])
+        return {"agent_response": response.content}
+    except Exception as e:
+        logger.error(f"RAG generate failed: {e}")
+        return {"agent_response": f"基于知识库检索到以下内容，但生成回答时出错：\n\n{rag_context}"}
+
+
+def should_retrieve(state: MiniClawState) -> str:
+    """条件边：判断是否需要进入 RAG 检索"""
+    if state.get("needs_rag"):
+        return "rag_retrieve"
+    return "skip_rag"

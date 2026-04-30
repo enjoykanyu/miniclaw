@@ -10,6 +10,12 @@ export type RetrievalResult = {
   source: string;
 };
 
+export type ThinkingStep = {
+  step: string;
+  status: "start" | "end";
+  message?: string;
+};
+
 export type SessionSummary = {
   id: string;
   title: string;

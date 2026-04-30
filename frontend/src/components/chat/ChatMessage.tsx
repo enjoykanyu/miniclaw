@@ -5,18 +5,20 @@ import remarkGfm from "remark-gfm";
 
 import { RetrievalCard } from "@/components/chat/RetrievalCard";
 import { ThoughtChain } from "@/components/chat/ThoughtChain";
-import type { RetrievalResult, ToolCall } from "@/lib/api";
+import type { RetrievalResult, ThinkingStep, ToolCall } from "@/lib/api";
 
 export function ChatMessage({
   role,
   content,
   toolCalls,
-  retrievals
+  retrievals,
+  thinkingSteps,
 }: {
   role: "user" | "assistant";
   content: string;
   toolCalls: ToolCall[];
   retrievals: RetrievalResult[];
+  thinkingSteps: ThinkingStep[];
 }) {
   const isUser = role === "user";
 
@@ -49,6 +51,11 @@ export function ChatMessage({
 
       {/* Content */}
       <div style={{ flex: 1, minWidth: 0, maxWidth: isUser ? "80%" : "85%" }}>
+        {/* Thinking Process - 只要有 thinkingSteps 就显示 */}
+        {!isUser && thinkingSteps.length > 0 && (
+          <ThinkingProcess steps={thinkingSteps} />
+        )}
+
         <div
           style={{
             display: "inline-block",
@@ -73,7 +80,8 @@ export function ChatMessage({
             </div>
           )}
 
-          {!isUser && (!content || content.trim() === "") && !toolCalls.length && (
+          {/* 只有在没有 content、没有 thinkingSteps、没有 toolCalls 时才显示默认 loading */}
+          {!isUser && (!content || content.trim() === "") && !toolCalls.length && thinkingSteps.length === 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "#999999" }}>
               <div style={{ display: "flex", gap: 4 }}>
                 <span
@@ -112,6 +120,92 @@ export function ChatMessage({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ThinkingProcess({ steps }: { steps: ThinkingStep[] }) {
+  const activeSteps = steps.filter((s) => s.status === "start");
+  const completedSteps = steps.filter((s) => s.status === "end");
+
+  return (
+    <div
+      style={{
+        marginBottom: 8,
+        borderRadius: 12,
+        backgroundColor: "#fafafa",
+        border: "1px solid #f0f0f0",
+        padding: "8px 12px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 3,
+          }}
+        >
+          <span
+            style={{
+              height: 5,
+              width: 5,
+              borderRadius: "50%",
+              backgroundColor: "#10a37f",
+              animation: "bounce 1.2s infinite",
+              animationDelay: "0ms",
+            }}
+          />
+          <span
+            style={{
+              height: 5,
+              width: 5,
+              borderRadius: "50%",
+              backgroundColor: "#10a37f",
+              animation: "bounce 1.2s infinite",
+              animationDelay: "200ms",
+            }}
+          />
+          <span
+            style={{
+              height: 5,
+              width: 5,
+              borderRadius: "50%",
+              backgroundColor: "#10a37f",
+              animation: "bounce 1.2s infinite",
+              animationDelay: "400ms",
+            }}
+          />
+        </div>
+        <span style={{ fontSize: 12, color: "#666666" }}>
+          {activeSteps.length > 0
+            ? activeSteps[activeSteps.length - 1].message || `正在调用 ${activeSteps[activeSteps.length - 1].step}...`
+            : completedSteps.length > 0
+            ? "思考完成"
+            : "正在思考..."}
+        </span>
+      </div>
+
+      {completedSteps.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {completedSteps.map((step, index) => (
+            <div
+              key={`${step.step}-${index}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 11,
+                color: "#999999",
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#10a37f" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <span>{step.message || step.step}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

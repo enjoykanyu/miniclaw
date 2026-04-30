@@ -55,6 +55,7 @@ export function ChatPanel() {
                 key={message.id}
                 retrievals={message.retrievals}
                 role={message.role}
+                thinkingSteps={message.thinkingSteps}
                 toolCalls={message.toolCalls}
               />
             ))}

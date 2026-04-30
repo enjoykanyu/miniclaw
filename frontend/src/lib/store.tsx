@@ -16,6 +16,7 @@ import {
   streamChat,
   type RetrievalResult,
   type SessionSummary,
+  type ThinkingStep,
   type ToolCall
 } from "@/lib/api";
 
@@ -25,6 +26,7 @@ type Message = {
   content: string;
   toolCalls: ToolCall[];
   retrievals: RetrievalResult[];
+  thinkingSteps: ThinkingStep[];
 };
 
 type AppStore = {
@@ -73,7 +75,8 @@ function toUiMessages(history: Awaited<ReturnType<typeof getSessionHistory>>["me
     role: message.role,
     content: message.content ?? "",
     toolCalls: message.tool_calls ?? [],
-    retrievals: []
+    retrievals: [],
+    thinkingSteps: []
   }));
 }
 
@@ -146,14 +149,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       role: "user",
       content: value.trim(),
       toolCalls: [],
-      retrievals: []
+      retrievals: [],
+      thinkingSteps: []
     };
     const assistantMessage: Message = {
       id: makeId(),
       role: "assistant",
       content: "",
       toolCalls: [],
-      retrievals: []
+      retrievals: [],
+      thinkingSteps: []
     };
 
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
@@ -172,6 +177,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
         { message: value.trim(), session_id: sessionId },
         {
           onEvent(event, data) {
+            console.log("[SSE event]", event, data);
+            // 思考过程事件
+            if (event === "thinking") {
+              const step = String(data.step ?? "");
+              const status = String(data.status ?? "start") as "start" | "end";
+              const message = String(data.message ?? "");
+              console.log("[SSE thinking]", step, status, message);
+
+              patchAssistant((msg) => {
+                const existingIndex = msg.thinkingSteps.findIndex(s => s.step === step);
+                if (existingIndex >= 0) {
+                  const updated = [...msg.thinkingSteps];
+                  updated[existingIndex] = { step, status, message };
+                  return { ...msg, thinkingSteps: updated };
+                }
+                return {
+                  ...msg,
+                  thinkingSteps: [...msg.thinkingSteps, { step, status, message }]
+                };
+              });
+              return;
+            }
+
             if (event === "retrieval") {
               patchAssistant((message) => ({
                 ...message,
@@ -224,7 +252,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 role: "assistant",
                 content: "",
                 toolCalls: [],
-                retrievals: []
+                retrievals: [],
+                thinkingSteps: []
               };
               activeAssistantId = nextAssistant.id;
               setMessages((prev) => [...prev, nextAssistant]);
