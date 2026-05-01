@@ -23,7 +23,7 @@ export function ChatMessage({
   const isUser = role === "user";
 
   return (
-    <div style={{ display: "flex", gap: 12, flexDirection: isUser ? "row-reverse" : "row" }}>
+    <div style={{ display: "flex", gap: 12, flexDirection: isUser ? "row" : "row-reverse", justifyContent: isUser ? "flex-end" : "flex-start" }}>
       {/* Avatar */}
       <div
         style={{
