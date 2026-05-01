@@ -7,7 +7,7 @@ import { ChatMessage } from "@/components/chat/ChatMessage";
 import { useAppStore } from "@/lib/store";
 
 export function ChatPanel() {
-  const { messages, sendMessage, isStreaming } = useAppStore();
+  const { messages, sendMessage, isStreaming, forceThink, forceSearch, toggleForceThink, toggleForceSearch } = useAppStore();
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -64,7 +64,14 @@ export function ChatPanel() {
         </div>
       </div>
 
-      <ChatInput disabled={isStreaming} onSend={sendMessage} />
+      <ChatInput
+        disabled={isStreaming}
+        onSend={sendMessage}
+        forceThink={forceThink}
+        forceSearch={forceSearch}
+        onToggleThink={toggleForceThink}
+        onToggleSearch={toggleForceSearch}
+      />
     </div>
   );
 }

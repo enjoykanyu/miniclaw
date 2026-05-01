@@ -28,6 +28,7 @@ class WorkerAgent(ABC):
     2. 可以访问共享的 State
     3. 返回 Command 以便 Supervisor 继续决策
     4. 支持工具调用和 ReAct 模式
+    5. 支持强制注入 think 和 trail 工具
     """
 
     name: str = "worker_agent"
@@ -41,26 +42,28 @@ class WorkerAgent(ABC):
         max_iterations: int = 5,
     ):
         self._llm = llm
-        self._tools = tools or []
+        self._base_tools = tools or []
         self._use_react = use_react
         self._max_iterations = max_iterations
 
-        # 构建工具映射表
-        self._tool_map: Dict[str, Callable] = {
-            tool.name: tool for tool in self._tools
-        }
+        # 强制注入的工具会在 execute 时动态添加
+        self._force_tools: List[BaseTool] = []
 
-        # 初始化 ReAct Agent（如果需要）
-        self._agent_executor = None
-        if self._use_react and self._tools:
-            self._init_react_agent()
+    def _build_tool_map(self) -> Dict[str, Callable]:
+        """构建工具映射表，包含基础工具和强制注入工具"""
+        all_tools = list(self._base_tools) + list(self._force_tools)
+        return {tool.name: tool for tool in all_tools}
 
-    def _init_react_agent(self) -> None:
-        """初始化 ReAct Agent"""
+    def _init_react_agent(self, extra_tools: Optional[List[BaseTool]] = None) -> None:
+        """初始化 ReAct Agent，支持动态工具注入"""
         system_prompt = self._get_system_prompt()
+        all_tools = list(self._base_tools)
+        if extra_tools:
+            all_tools.extend(extra_tools)
+
         self._agent_executor = create_react_agent(
             model=self.llm,
-            tools=self._tools,
+            tools=all_tools,
             state_modifier=system_prompt,
         )
 
@@ -76,20 +79,23 @@ class WorkerAgent(ABC):
 
     def get_tools(self) -> List[BaseTool]:
         """获取工具列表，包括本地工具和 MCP 工具"""
-        tools = list(self._tools)
-        
+        tools = list(self._base_tools)
+
         # 添加 MCP 工具
         try:
             mcp_tools = mcp_tool_registry.get_all_tools()
             tools.extend(mcp_tools)
         except Exception:
             pass
-        
+
         return tools
 
-    def bind_tools(self) -> Any:
-        if self._tools:
-            return self.llm.bind_tools(self._tools)
+    def bind_tools(self, extra_tools: Optional[List[BaseTool]] = None) -> Any:
+        all_tools = list(self._base_tools)
+        if extra_tools:
+            all_tools.extend(extra_tools)
+        if all_tools:
+            return self.llm.bind_tools(all_tools)
         return self.llm
 
     def get_last_user_message(self, state: MiniClawState) -> str:
@@ -108,16 +114,66 @@ class WorkerAgent(ABC):
         new_state.update(updates)
         return new_state
 
+    def _get_force_tools(self, state: MiniClawState) -> List[BaseTool]:
+        """
+        根据 State 中的 metadata 获取需要强制注入的工具
+
+        这是强制工具注入的核心逻辑：
+        1. 从 state.metadata 中读取 force_think 和 force_search
+        2. 根据标记动态导入并返回对应的工具
+        """
+        force_tools: List[BaseTool] = []
+        metadata = state.get("metadata") or {}
+
+        if metadata.get("force_think"):
+            from miniclaw.tools.think import think
+            if think not in force_tools:
+                force_tools.append(think)
+
+        if metadata.get("force_search"):
+            from miniclaw.tools.trail import trail
+            if trail not in force_tools:
+                force_tools.append(trail)
+
+        return force_tools
+
+    def _build_force_prompt(self, state: MiniClawState) -> str:
+        """
+        构建强制工具使用的提示词追加
+
+        当用户强制启用某些功能时，在系统提示词中追加明确要求，
+        增加模型调用对应工具的概率。
+        """
+        prompts = []
+        metadata = state.get("metadata") or {}
+
+        if metadata.get("force_think"):
+            prompts.append(
+                "\n\n【强制要求】用户已启用深度思考模式。"
+                "在回答任何问题前，你必须先调用 `think` 工具进行结构化思考，"
+                "分析问题的各个方面，然后再给出最终回答。"
+            )
+
+        if metadata.get("force_search"):
+            prompts.append(
+                "\n\n【强制要求】用户已启用联网搜索模式。"
+                "在回答前，你必须先调用 `trail` 工具搜索最新的网络信息，"
+                "基于搜索结果给出准确、及时的回复。"
+            )
+
+        return "\n".join(prompts)
+
     async def execute(self, state: MiniClawState) -> Dict[str, Any]:
         """
         执行 Worker 任务
 
-        这是 Worker 的核心方法，被 Supervisor 调用
-
-        Returns:
-            Dict 包含更新后的 state 字段
+        这是 Worker 的核心方法，被 Supervisor 调用。
+        在调用前会根据 state.metadata 中的 force 标记注入工具。
         """
-        if self._use_react and self._agent_executor:
+        # 动态获取需要强制注入的工具
+        self._force_tools = self._get_force_tools(state)
+
+        if self._use_react and (self._base_tools or self._force_tools):
             return await self._execute_react(state)
         else:
             return await self._execute_single_call(state)
@@ -128,7 +184,9 @@ class WorkerAgent(ABC):
         """
         messages = state.get("messages", [])
 
-        # 使用 ReAct Agent 执行
+        # 使用包含强制工具的 ReAct Agent 执行
+        self._init_react_agent(self._force_tools)
+
         result = await self._agent_executor.ainvoke(
             {"messages": messages},
             config={"recursion_limit": self._max_iterations}
@@ -146,10 +204,20 @@ class WorkerAgent(ABC):
 
     async def _execute_single_call(self, state: MiniClawState) -> Dict[str, Any]:
         """
-        单次调用模式执行
+        单次调用模式执行（支持强制工具注入）
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         user_message = self.get_last_user_message(state)
         system_prompt = self._get_system_prompt()
+
+        logger.info(f"[Worker:{self.name}] user_message={user_message!r}")
+
+        # 追加强制使用工具的提示词
+        force_prompt = self._build_force_prompt(state)
+        if force_prompt:
+            system_prompt += force_prompt
 
         # 构建消息
         messages = [
@@ -157,15 +225,19 @@ class WorkerAgent(ABC):
             HumanMessage(content=user_message),
         ]
 
-        # 绑定工具并调用 LLM
-        llm_with_tools = self.bind_tools()
+        # 绑定工具并调用 LLM（包含强制注入的工具）
+        llm_with_tools = self.bind_tools(self._force_tools)
         response = await llm_with_tools.ainvoke(messages)
+
+        logger.info(f"[Worker:{self.name}] response type={type(response)}, content={getattr(response, 'content', repr(response))!r}")
 
         # 处理工具调用
         if hasattr(response, "tool_calls") and response.tool_calls:
             final_content = await self._handle_tool_calls(response.tool_calls, messages, response)
         else:
             final_content = response.content
+
+        logger.info(f"[Worker:{self.name}] final_content={final_content!r}")
 
         return {
             "current_agent": self.name,
@@ -181,12 +253,13 @@ class WorkerAgent(ABC):
     ) -> str:
         """处理工具调用"""
         tool_results = []
+        tool_map = self._build_tool_map()
 
         for tool_call in tool_calls:
             tool_name = self._extract_tool_name(tool_call)
             tool_args = self._extract_tool_args(tool_call)
 
-            result = await self._execute_single_tool(tool_name, tool_args)
+            result = await self._execute_single_tool(tool_name, tool_args, tool_map)
             tool_results.append({"name": tool_name, "result": result})
 
         # 构建上下文并让 LLM 生成回复
@@ -217,13 +290,16 @@ class WorkerAgent(ABC):
                 return {}
         return args if isinstance(args, dict) else {}
 
-    async def _execute_single_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> str:
+    async def _execute_single_tool(self, tool_name: str, tool_args: Dict[str, Any], tool_map: Optional[Dict[str, Callable]] = None) -> str:
         """执行单个工具"""
-        if tool_name not in self._tool_map:
+        if tool_map is None:
+            tool_map = self._build_tool_map()
+
+        if tool_name not in tool_map:
             return f"❌ 工具 '{tool_name}' 未找到"
 
         try:
-            tool = self._tool_map[tool_name]
+            tool = tool_map[tool_name]
 
             # 支持异步工具
             if hasattr(tool, 'ainvoke'):

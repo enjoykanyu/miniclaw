@@ -125,6 +125,8 @@ export async function streamChat(
   payload: {
     message: string;
     session_id: string;
+    force_think?: boolean;
+    force_search?: boolean;
   },
   handlers: StreamHandlers
 ) {

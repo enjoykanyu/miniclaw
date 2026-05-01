@@ -279,6 +279,8 @@ class MiniClawApp:
         user_id: str = "default",
         session_id: str = "default",
         thread_id: str = "default",
+        force_think: bool = False,
+        force_search: bool = False,
     ):
         """
         流式聊天接口（带异常处理）

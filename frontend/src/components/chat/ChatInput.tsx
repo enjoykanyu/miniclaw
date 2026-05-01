@@ -1,14 +1,22 @@
 "use client";
 
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, Globe, Brain } from "lucide-react";
 import { useState, useRef } from "react";
 
 export function ChatInput({
   disabled,
-  onSend
+  onSend,
+  forceThink,
+  forceSearch,
+  onToggleThink,
+  onToggleSearch,
 }: {
   disabled: boolean;
   onSend: (value: string) => Promise<void>;
+  forceThink: boolean;
+  forceSearch: boolean;
+  onToggleThink: () => void;
+  onToggleSearch: () => void;
 }) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -48,35 +56,81 @@ export function ChatInput({
             e.currentTarget.style.boxShadow = "none";
           }}
         >
-          <textarea
-            ref={textareaRef}
-            style={{
-              flex: 1,
-              resize: "none",
-              backgroundColor: "transparent",
-              padding: "8px 0",
-              fontSize: 14,
-              color: "#1a1a1a",
-              outline: "none",
-              border: "none",
-              maxHeight: 128,
-              lineHeight: 1.5,
-            }}
-            onChange={(event) => {
-              setValue(event.target.value);
-              event.target.style.height = "auto";
-              event.target.style.height = `${Math.min(event.target.scrollHeight, 128)}px`;
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder="输入你的问题，按 Enter 发送，Shift+Enter 换行..."
-            rows={1}
-            value={value}
-          />
+          <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: 4 }}>
+            <textarea
+              ref={textareaRef}
+              style={{
+                flex: 1,
+                resize: "none",
+                backgroundColor: "transparent",
+                padding: "8px 0",
+                fontSize: 14,
+                color: "#1a1a1a",
+                outline: "none",
+                border: "none",
+                maxHeight: 128,
+                lineHeight: 1.5,
+              }}
+              onChange={(event) => {
+                setValue(event.target.value);
+                event.target.style.height = "auto";
+                event.target.style.height = `${Math.min(event.target.scrollHeight, 128)}px`;
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="有什么我能帮您的？"
+              rows={1}
+              value={value}
+            />
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={onToggleSearch}
+                title="联网搜索"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "4px 10px",
+                  borderRadius: 12,
+                  border: "none",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  backgroundColor: forceSearch ? "#10a37f" : "transparent",
+                  color: forceSearch ? "#ffffff" : "#666666",
+                }}
+              >
+                <Globe size={14} />
+                <span>联网搜索</span>
+              </button>
+              <button
+                type="button"
+                onClick={onToggleThink}
+                title="深度思考"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "4px 10px",
+                  borderRadius: 12,
+                  border: "none",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  backgroundColor: forceThink ? "#10a37f" : "transparent",
+                  color: forceThink ? "#ffffff" : "#666666",
+                }}
+              >
+                <Brain size={14} />
+                <span>深度思考</span>
+              </button>
+            </div>
+          </div>
           <button
             style={{
               display: "flex",

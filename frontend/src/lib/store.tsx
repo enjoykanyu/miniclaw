@@ -35,6 +35,8 @@ type AppStore = {
   messages: Message[];
   isStreaming: boolean;
   ragMode: boolean;
+  forceThink: boolean;
+  forceSearch: boolean;
   skills: Array<{ name: string; description: string; path: string }>;
   editableFiles: string[];
   inspectorPath: string;
@@ -46,6 +48,8 @@ type AppStore = {
   selectSession: (sessionId: string) => Promise<void>;
   sendMessage: (value: string) => Promise<void>;
   toggleRagMode: () => Promise<void>;
+  toggleForceThink: () => void;
+  toggleForceSearch: () => void;
   renameCurrentSession: (title: string) => Promise<void>;
   removeSession: (sessionId: string) => Promise<void>;
   loadInspectorFile: (path: string) => Promise<void>;
@@ -86,6 +90,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [ragMode, setRagModeState] = useState(false);
+  const [forceThink, setForceThink] = useState(false);
+  const [forceSearch, setForceSearch] = useState(false);
   const [skills, setSkills] = useState<Array<{ name: string; description: string; path: string }>>([]);
   const [inspectorPath, setInspectorPath] = useState(
     "config/prompts/router.yaml"
@@ -174,7 +180,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       await streamChat(
-        { message: value.trim(), session_id: sessionId },
+        { message: value.trim(), session_id: sessionId, force_think: forceThink, force_search: forceSearch },
         {
           onEvent(event, data) {
             console.log("[SSE event]", event, data);
@@ -306,6 +312,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  function toggleForceThink() {
+    setForceThink((prev) => !prev);
+  }
+
+  function toggleForceSearch() {
+    setForceSearch((prev) => !prev);
+  }
+
   async function renameCurrentSession(title: string) {
     if (!currentSessionId || !title.trim()) {
       return;
@@ -386,6 +400,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     messages,
     isStreaming,
     ragMode,
+    forceThink,
+    forceSearch,
     skills,
     editableFiles,
     inspectorPath,
@@ -397,6 +413,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     selectSession,
     sendMessage,
     toggleRagMode,
+    toggleForceThink,
+    toggleForceSearch,
     renameCurrentSession,
     removeSession,
     loadInspectorFile,

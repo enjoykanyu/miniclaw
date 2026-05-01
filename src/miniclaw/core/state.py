@@ -64,6 +64,10 @@ class MiniClawState(TypedDict):
     excel_files: Optional[List[str]]
     current_excel: Optional[str]
 
+    rag_context: Optional[str]
+    rag_sources: Optional[List[dict]]
+    needs_rag: Optional[bool]
+
     metadata: Optional[dict]
     created_at: Optional[str]
     updated_at: Optional[str]
@@ -88,6 +92,9 @@ def create_initial_state(user_id: str, session_id: str) -> MiniClawState:
         news_items=[],
         excel_files=[],
         current_excel=None,
+        rag_context=None,
+        rag_sources=[],
+        needs_rag=None,
         metadata={},
         created_at=now,
         updated_at=now,
