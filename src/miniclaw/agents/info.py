@@ -9,6 +9,7 @@ from langchain_core.tools import tool
 
 from miniclaw.agents.worker import WorkerAgent
 from miniclaw.utils.helpers import load_prompt_template
+from miniclaw.rag.rag_tools import rag_search, rag_add_documents, rag_add_directory, rag_list_kbs, rag_delete_kb
 
 
 @tool
@@ -52,20 +53,6 @@ def get_news(category: str = "all", count: int = 5) -> list:
         return [{"error": str(e), "message": "无法获取新闻，请稍后重试"}]
 
 
-@tool
-def search_knowledge(query: str) -> str:
-    """
-    Search knowledge base for relevant information.
-
-    Args:
-        query: Search query
-
-    Returns:
-        Relevant information from knowledge base
-    """
-    return f"知识库搜索结果: 关于 '{query}' 的相关信息暂未找到，请尝试其他关键词。"
-
-
 class InfoAgent(WorkerAgent):
     """
     信息获取 Worker Agent
@@ -73,7 +60,7 @@ class InfoAgent(WorkerAgent):
     功能：
     - 查询天气信息
     - 获取新闻头条
-    - 知识库搜索
+    - 知识库搜索与管理
     """
 
     name = "info"
@@ -81,7 +68,7 @@ class InfoAgent(WorkerAgent):
 
     def __init__(self, llm=None, tools=None, use_react: bool = False):
         if tools is None:
-            tools = [get_weather, get_news, search_knowledge]
+            tools = [get_weather, get_news, rag_search, rag_add_documents, rag_add_directory, rag_list_kbs, rag_delete_kb]
         super().__init__(llm=llm, tools=tools, use_react=use_react)
         self._prompts = load_prompt_template("info")
 
@@ -149,8 +136,5 @@ class InfoAgent(WorkerAgent):
                     lines.append(f"{i}. {category_emoji} {title}")
 
             return "\n".join(lines)
-
-        elif tool_name == "search_knowledge":
-            return str(result)
 
         return None

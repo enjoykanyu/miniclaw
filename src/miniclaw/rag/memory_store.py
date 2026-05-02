@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import json
 
-from miniclaw.rag.vectorstore import Document, get_vectorstore
+from miniclaw.rag.types import Document
+from miniclaw.rag.vectorstore import get_vectorstore
 from miniclaw.utils.helpers import format_datetime
 
 
@@ -217,8 +218,8 @@ class LongTermMemory:
     ) -> List[Dict[str, Any]]:
         filter_expr = None
         if category:
-            filter_expr = f'category == "{category}"'
-        
+            filter_expr = {"category": category}
+
         results = self.vectorstore.similarity_search(query, k=k, filter_expr=filter_expr)
         
         return [

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
         description="Ollama server URL",
     )
     OLLAMA_MODEL: str = Field(
-        default="qwen3:1.7b",
+        default="qwen3:0.6b",
         description="Ollama model name",
     )
 

@@ -7,7 +7,8 @@ from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from miniclaw.rag.vectorstore import Document, get_vectorstore
+from miniclaw.rag.types import Document
+from miniclaw.rag.vectorstore import get_vectorstore
 from miniclaw.tools.news import fetch_news
 from miniclaw.utils.helpers import format_datetime
 

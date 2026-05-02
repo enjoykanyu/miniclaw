@@ -1,5 +1,5 @@
 """
-MiniClaw LangGraph Workflow - Supervisor Multi-Agent Pattern
+MiniClaw LangGraph Workflow - Supervisor Multi-Agent Pattern with RAG
 """
 
 import logging
@@ -150,10 +150,16 @@ async def _execute_worker_node(agent_type: str, state: MiniClawState) -> Dict[st
         }
 
 
-def build_supervisor_graph(checkpointer: Optional[MemorySaver] = None):
+def build_supervisor_graph(checkpointer: Optional[MemorySaver] = None, enable_rag: bool = True):
     """
-    构建 Supervisor 多 Agent 工作流
+    构建 Supervisor 多 Agent 工作流（含 RAG 节点）
+
+    流程:
+      入口 -> rag_detect -> (需要RAG) -> rag_retrieve -> rag_generate -> END
+                          -> (不需要RAG) -> supervisor -> worker agents -> END
     """
+    from miniclaw.rag.rag_node import rag_detect_node, rag_retrieve_node, rag_generate_node, should_retrieve
+
     graph = StateGraph(MiniClawState)
 
     # 添加节点
@@ -166,10 +172,28 @@ def build_supervisor_graph(checkpointer: Optional[MemorySaver] = None):
     graph.add_node(WorkerType.CHAT.value, chat_agent_node)
     graph.add_node("finish", lambda state: {"agent_response": state.get("agent_response", "对话结束")})
 
-    # 设置入口点
-    graph.set_entry_point("supervisor")
+    if enable_rag:
+        graph.add_node("rag_detect", rag_detect_node)
+        graph.add_node("rag_retrieve", rag_retrieve_node)
+        graph.add_node("rag_generate", rag_generate_node)
 
-    # 添加边：所有 Worker 执行完后回到 Supervisor
+        graph.set_entry_point("rag_detect")
+
+        graph.add_conditional_edges(
+            "rag_detect",
+            should_retrieve,
+            {
+                "rag_retrieve": "rag_retrieve",
+                "skip_rag": "supervisor",
+            }
+        )
+        graph.add_edge("rag_retrieve", "rag_generate")
+        graph.add_edge("rag_generate", END)
+    else:
+        graph.set_entry_point("supervisor")
+
+    # 添加边：所有 Worker 执行完后直接结束（不需要回到 Supervisor）
+    # Supervisor 的条件边已经决定了下一个节点，Worker 执行完后结束当前轮次
     workers = [
         WorkerType.LEARNING.value,
         WorkerType.TASK.value,
@@ -180,7 +204,7 @@ def build_supervisor_graph(checkpointer: Optional[MemorySaver] = None):
     ]
 
     for worker in workers:
-        graph.add_edge(worker, "supervisor")
+        graph.add_edge(worker, END)
 
     # 添加条件边：Supervisor 决定下一个节点
     graph.add_conditional_edges(
@@ -293,7 +317,10 @@ class MiniClawApp:
         initial_state["messages"] = [HumanMessage(content=message)]
 
         try:
-            async for event in self.graph.astream(initial_state, config):
+            # 使用 astream_events 获取真正的流式 token
+            async for event in self.graph.astream_events(
+                initial_state, config, version="v2"
+            ):
                 yield event
         except Exception as e:
             logger.error(f"Stream processing error: {e}")

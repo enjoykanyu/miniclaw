@@ -77,7 +77,7 @@ if __name__ == "__main__":
         print(f"read_file(当前文件): {result[:100]}...")
         print(f"bash('echo hello'): {bash.invoke({'command': 'echo hello'})}")
         
-        print("\n=== 测试2: 权限检查 ===")
+        print("\n=== 测试2: 权限校验中 ===")
         print(f"plan模式调用write_file: {check_permission('write_file', {'path': 'test.txt'}, 'plan')}")
         result = check_permission('bash', {'command': 'rm -rf /tmp/test'})
         print(f"危险命令rm: {result}")
