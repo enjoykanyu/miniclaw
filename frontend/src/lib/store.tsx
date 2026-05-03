@@ -187,20 +187,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
             // 思考过程事件
             if (event === "thinking") {
               const step = String(data.step ?? "");
-              const status = String(data.status ?? "start") as "start" | "end";
+              const status = String(data.status ?? "start") as "start" | "end" | "thinking";
               const message = String(data.message ?? "");
-              console.log("[SSE thinking]", step, status, message);
+              const isThinkingContent = Boolean(data.is_thinking_content);
+              console.log("[SSE thinking]", step, status, message, isThinkingContent);
 
               patchAssistant((msg) => {
                 const existingIndex = msg.thinkingSteps.findIndex(s => s.step === step);
                 if (existingIndex >= 0) {
                   const updated = [...msg.thinkingSteps];
-                  updated[existingIndex] = { step, status, message };
+                  const existing = updated[existingIndex];
+                  // 如果是实时思考内容，累积到 thinkingContent
+                  if (status === "thinking" && isThinkingContent) {
+                    updated[existingIndex] = {
+                      ...existing,
+                      status: "thinking",
+                      thinkingContent: (existing.thinkingContent || "") + message
+                    };
+                  } else if (status === "end") {
+                    // 节点结束时，保留 thinkingContent，同时更新 status 和 message
+                    updated[existingIndex] = {
+                      ...existing,
+                      status: "end",
+                      message: message || existing.message
+                    };
+                  } else {
+                    updated[existingIndex] = { ...existing, step, status, message };
+                  }
                   return { ...msg, thinkingSteps: updated };
                 }
+                // 新建 step
+                const newStep: ThinkingStep = status === "thinking" && isThinkingContent
+                  ? { step, status: "thinking", message, thinkingContent: message }
+                  : { step, status, message };
                 return {
                   ...msg,
-                  thinkingSteps: [...msg.thinkingSteps, { step, status, message }]
+                  thinkingSteps: [...msg.thinkingSteps, newStep]
                 };
               });
               return;
@@ -297,7 +319,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsStreaming(false);
       await refreshSessions();
+      let thinkingStepsBackup = new Map<string, ThinkingStep[]>();
+      setMessages((prev) => {
+        const backup = new Map<string, ThinkingStep[]>();
+        for (const msg of prev) {
+          if (msg.thinkingSteps && msg.thinkingSteps.length > 0) {
+            backup.set(msg.content, [...msg.thinkingSteps]);
+          }
+        }
+        thinkingStepsBackup = backup;
+        return prev;
+      });
       await refreshSessionDetails(sessionId);
+      if (thinkingStepsBackup.size > 0) {
+        setMessages((prev) =>
+          prev.map((msg) => {
+            const saved = thinkingStepsBackup.get(msg.content);
+            if (saved && saved.length > 0 && (!msg.thinkingSteps || msg.thinkingSteps.length === 0)) {
+              return { ...msg, thinkingSteps: saved };
+            }
+            return msg;
+          })
+        );
+      }
     }
   }
 

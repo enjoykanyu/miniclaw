@@ -152,6 +152,63 @@ def _save_sessions():
         logger.warning(f"Failed to save sessions: {e}")
 
 
+# 节点详细描述映射
+NODE_DESCRIPTIONS = {
+    "rag_detect": {
+        "title": "检索增强检测",
+        "description": "分析用户问题是否需要检索外部知识库",
+        "details": "检查问题是否涉及需要查询文档、知识库或外部信息的场景",
+    },
+    "supervisor": {
+        "title": "智能路由决策",
+        "description": "分析用户意图并选择最合适的专业助手",
+        "details": "基于用户问题的类型和上下文，决策分配给哪个专业 Agent 处理",
+    },
+    "chat": {
+        "title": "对话助手",
+        "description": "处理日常对话和通用问题",
+        "details": "负责日常聊天、问候、简单问答、情感交流等通用对话场景",
+    },
+    "info": {
+        "title": "信息查询助手",
+        "description": "查询天气、新闻等实时信息",
+        "details": "调用天气、新闻等工具获取实时信息，回答用户的事实性问题",
+    },
+    "health": {
+        "title": "健康顾问",
+        "description": "提供健康建议和作息管理",
+        "details": "分析用户的健康相关问题，提供休息提醒、作息建议等健康管理方案",
+    },
+    "learning": {
+        "title": "学习规划师",
+        "description": "制定学习计划和知识追踪",
+        "details": "根据用户需求制定个性化学习计划，追踪学习进度，推荐学习资源",
+    },
+    "task": {
+        "title": "任务管理助手",
+        "description": "管理待办事项和提醒",
+        "details": "帮助用户创建、管理和追踪任务，设置提醒，优化任务安排",
+    },
+    "data": {
+        "title": "数据处理助手",
+        "description": "处理 Excel 和数据分析",
+        "details": "协助用户进行 Excel 操作、数据分析、图表生成等数据处理任务",
+    },
+}
+
+
+def _get_node_description(node_name: str, action: str = "start") -> str:
+    """获取节点的详细描述"""
+    node_info = NODE_DESCRIPTIONS.get(node_name, {})
+    if not node_info:
+        return f"正在调用 {node_name}..."
+    
+    if action == "start":
+        return f"{node_info['title']}：{node_info['description']}"
+    else:
+        return f"{node_info['title']}：{node_info['details']}"
+
+
 _load_sessions()
 
 
@@ -240,6 +297,7 @@ async def chat_stream(request: ChatRequest):
                 force_think=request.force_think,
                 force_search=request.force_search,
             ):
+                # logger.info(f"ALL EVENT: {type(event).__name__} = {event}")
                 if isinstance(event, dict):
                     if event.get("error"):
                         yield f"event: error\ndata: {json.dumps({'error': event.get('message', 'Unknown error'), 'details': event.get('details', '')})}\n\n"
@@ -247,21 +305,24 @@ async def chat_stream(request: ChatRequest):
                     
                     event_type = event.get("event")
                     event_name = event.get("name", "")
-                    logger.info(f"[SSE] event_type={event_type}, name={event_name}")
+                    # logger.info(f"[SSE] event_type={event_type}, name={event_name}")
                     
                     # 节点开始执行 - 发送思考过程
                     if event_type in ("on_chain_start", "on_chat_model_start"):
                         node_name = event_name
                         # 过滤内部节点、LangGraph框架节点和LLM模型事件
                         skip_nodes = {"__start__", "__end__", "RunnableSequence", "Unnamed", "LangGraph", "should_retrieve"}
+                        if node_name not in skip_nodes:
+                            logger.info(f"✅ 输出 thinking: {node_name}")  # 看是否执行到这里
                         # 跳过 LLM 模型事件（如 ChatOllama, ChatOpenAI）
                         if node_name and node_name not in skip_nodes and not node_name.startswith("Chat"):
                             # 追踪 supervisor 节点进入
                             if node_name == "supervisor":
                                 in_supervisor = True
                             current_agent = node_name
-                            logger.info(f"[SSE] yield thinking start: {node_name}")
-                            yield f"event: thinking\ndata: {json.dumps({'step': node_name, 'status': 'start', 'message': f'正在调用 {node_name}...'})}\n\n"
+                            # 使用详细描述
+                            description = _get_node_description(node_name, "start")
+                            yield f"event: thinking\ndata: {json.dumps({'step': node_name, 'status': 'start', 'message': description})}\n\n"
                     
                     # 节点结束执行
                     elif event_type in ("on_chain_end", "on_chat_model_end"):
@@ -272,14 +333,32 @@ async def chat_stream(request: ChatRequest):
                             # 追踪 supervisor 节点退出
                             if node_name == "supervisor":
                                 in_supervisor = False
-                            logger.info(f"[SSE] yield thinking end: {node_name}")
-                            yield f"event: thinking\ndata: {json.dumps({'step': node_name, 'status': 'end'})}\n\n"
+                            
+                            # 提取 Supervisor 决策原因
+                            thinking_message = _get_node_description(node_name, "end")
+                            if node_name == "supervisor":
+                                data = event.get("data", {})
+                                output = data.get("output", {})
+                                if hasattr(output, "update") and callable(getattr(output, "update", None)) is False:
+                                    update_data = output.update
+                                    if isinstance(update_data, dict):
+                                        reason = update_data.get("supervisor_reason", "")
+                                        next_agent = update_data.get("next_agent", "")
+                                        if reason:
+                                            thinking_message = f"决策分析：{reason}\n→ 路由到：{next_agent}"
+                                elif isinstance(output, dict):
+                                    reason = output.get("supervisor_reason", "")
+                                    next_agent = output.get("next_agent", "")
+                                    if reason:
+                                        thinking_message = f"决策分析：{reason}\n→ 路由到：{next_agent}"
+                            
+                            yield f"event: thinking\ndata: {json.dumps({'step': node_name, 'status': 'end', 'message': thinking_message})}\n\n"
                             
                             # 提取节点输出内容（对于非流式调用的 agent）
                             if node_name != "supervisor":
                                 data = event.get("data", {})
                                 output = data.get("output", {})
-                                logger.info(f"[SSE] Extracting content from {node_name}, output type={type(output)}, output={output}")
+                                # logger.info(f"[SSE] Extracting content from {node_name}, output type={type(output)}, output={output}")
                                 # 处理 Command 对象
                                 if hasattr(output, "update") and callable(getattr(output, "update", None)) is False:
                                     # 确保 update 是属性而不是方法
@@ -309,9 +388,6 @@ async def chat_stream(request: ChatRequest):
                     
                     # 流式 token
                     elif event_type == "on_chat_model_stream":
-                        # 过滤 Supervisor 节点的结构化输出，不发送给用户
-                        if in_supervisor:
-                            continue
                         data = event.get("data", {})
                         chunk = data.get("chunk", {})
                         content = ""
@@ -320,6 +396,12 @@ async def chat_stream(request: ChatRequest):
                         elif isinstance(chunk, dict):
                             content = chunk.get("content", "")
                         if content:
+                            # 在 Supervisor 节点内，收集思考内容
+                            if in_supervisor:
+                                thinking_content += content
+                                # 实时发送思考内容到前端
+                                yield f"event: thinking\ndata: {json.dumps({'step': 'supervisor', 'status': 'thinking', 'message': content, 'is_thinking_content': True})}\n\n"
+                                continue
                             full_content += content
                             yield f"event: token\ndata: {json.dumps({'content': content})}\n\n"
                     
@@ -343,7 +425,9 @@ async def chat_stream(request: ChatRequest):
                         yield f"event: message\ndata: {json.dumps({'event': event_type, 'data': str(event)})}\n\n"
                 else:
                     # 非字典事件（图节点输出）
+                    # logger.info(f"[NODE OUTPUT] keys={list(event.keys()) if hasattr(event, 'keys') else 'N/A'}")
                     for node_name, node_data in event.items():
+                        logger.info(f"[NODE] {node_name}: {node_data}")
                         # 跳过框架内部节点和 Supervisor 节点
                         skip_nodes = {"supervisor", "LangGraph", "__start__", "__end__"}
                         if node_name in skip_nodes:

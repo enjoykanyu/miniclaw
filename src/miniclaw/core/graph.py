@@ -69,6 +69,7 @@ async def supervisor_node(state: MiniClawState) -> Command[Literal[
     2. 决定下一个 Worker Agent
     3. 返回 Command 进行路由
     """
+    logger.info(f"🎯 Supervisor 被调用！用户消息: {state.get('messages', [])[-1]}")
     try:
         supervisor = SupervisorAgent()
         command = await supervisor.route(state)

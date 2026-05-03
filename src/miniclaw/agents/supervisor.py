@@ -188,6 +188,7 @@ class SupervisorAgent:
         ]
 
         # 使用结构化输出获取决策
+        decision_reason = ""
         try:
             # 尝试使用 with_structured_output
             from pydantic import BaseModel, Field
@@ -203,26 +204,37 @@ class SupervisorAgent:
             structured_llm = self._llm.with_structured_output(RoutingDecision)
             decision = await structured_llm.ainvoke(messages)
             next_agent = decision.next_agent.lower()
+            decision_reason = decision.reason
 
         except Exception:
             # 降级：直接调用 LLM 并解析结果
             response = await self._llm.ainvoke(messages)
             content = response.content.lower()
+            decision_reason = response.content
 
             # 解析响应，找出匹配的 Worker
             next_agent = self._parse_agent_from_response(content)
 
         # 验证并返回 Command
         if next_agent == WorkerType.FINISH.value:
-            return Command(goto=WorkerType.FINISH.value)
+            return Command(
+                goto=WorkerType.FINISH.value,
+                update={"next_agent": WorkerType.FINISH.value, "supervisor_reason": decision_reason}
+            )
 
         # 检查是否是有效的 Worker
         valid_workers = [w.value for w in self._workers if w != WorkerType.FINISH]
         if next_agent in valid_workers:
-            return Command(goto=next_agent)
+            return Command(
+                goto=next_agent,
+                update={"next_agent": next_agent, "supervisor_reason": decision_reason}
+            )
 
         # 默认路由到 chat
-        return Command(goto=WorkerType.CHAT.value)
+        return Command(
+            goto=WorkerType.CHAT.value,
+            update={"next_agent": WorkerType.CHAT.value, "supervisor_reason": decision_reason}
+        )
 
     def _parse_agent_from_response(self, content: str) -> str:
         """从 LLM 响应中解析 Agent 名称"""

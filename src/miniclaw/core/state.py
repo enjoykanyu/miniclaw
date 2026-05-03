@@ -45,6 +45,7 @@ class MiniClawState(TypedDict):
 
     # Supervisor 路由相关
     next_agent: Optional[str]  # Supervisor 决定的下一个 Agent
+    supervisor_reason: Optional[str]  # Supervisor 决策原因
 
     intent: Optional[str]
     current_agent: Optional[str]

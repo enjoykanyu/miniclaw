@@ -12,8 +12,9 @@ export type RetrievalResult = {
 
 export type ThinkingStep = {
   step: string;
-  status: "start" | "end";
+  status: "start" | "end" | "thinking";
   message?: string;
+  thinkingContent?: string;
 };
 
 export type SessionSummary = {
