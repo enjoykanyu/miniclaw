@@ -208,6 +208,26 @@ async def chat_stream(request: ChatRequest):
         current_agent = ""
         in_supervisor = False
         
+        # 确保 session 存在（兼容默认 session）
+        if session_id not in _sessions:
+            now = datetime.now().timestamp()
+            _sessions[session_id] = {
+                "title": request.message[:20] + "..." if len(request.message) > 20 else request.message,
+                "created_at": now,
+                "updated_at": now,
+            }
+            _session_messages[session_id] = []
+            _save_sessions()
+        
+        # 保存用户消息
+        _session_messages[session_id].append({
+            "role": "user",
+            "content": request.message,
+            "timestamp": datetime.now().isoformat(),
+        })
+        _sessions[session_id]["updated_at"] = datetime.now().timestamp()
+        _save_sessions()
+        
         try:
             # 发送开始事件
             yield f"event: start\ndata: {json.dumps({'session_id': session_id})}\n\n"
@@ -232,9 +252,10 @@ async def chat_stream(request: ChatRequest):
                     # 节点开始执行 - 发送思考过程
                     if event_type in ("on_chain_start", "on_chat_model_start"):
                         node_name = event_name
-                        # 过滤内部节点和LangGraph框架节点
-                        skip_nodes = {"__start__", "__end__", "RunnableSequence", "Unnamed"}
-                        if node_name and node_name not in skip_nodes:
+                        # 过滤内部节点、LangGraph框架节点和LLM模型事件
+                        skip_nodes = {"__start__", "__end__", "RunnableSequence", "Unnamed", "LangGraph", "should_retrieve"}
+                        # 跳过 LLM 模型事件（如 ChatOllama, ChatOpenAI）
+                        if node_name and node_name not in skip_nodes and not node_name.startswith("Chat"):
                             # 追踪 supervisor 节点进入
                             if node_name == "supervisor":
                                 in_supervisor = True
@@ -245,8 +266,9 @@ async def chat_stream(request: ChatRequest):
                     # 节点结束执行
                     elif event_type in ("on_chain_end", "on_chat_model_end"):
                         node_name = event_name
-                        skip_nodes = {"__start__", "__end__", "RunnableSequence", "Unnamed"}
-                        if node_name and node_name not in skip_nodes:
+                        skip_nodes = {"__start__", "__end__", "RunnableSequence", "Unnamed", "LangGraph", "should_retrieve"}
+                        # 跳过 LLM 模型事件（如 ChatOllama, ChatOpenAI）
+                        if node_name and node_name not in skip_nodes and not node_name.startswith("Chat"):
                             # 追踪 supervisor 节点退出
                             if node_name == "supervisor":
                                 in_supervisor = False
@@ -347,6 +369,16 @@ async def chat_stream(request: ChatRequest):
             logger.error(f"Event generator error: {e}")
             yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
         finally:
+            # 保存 AI 回复
+            if full_content and session_id in _session_messages:
+                _session_messages[session_id].append({
+                    "role": "assistant",
+                    "content": full_content,
+                    "timestamp": datetime.now().isoformat(),
+                })
+                _sessions[session_id]["updated_at"] = datetime.now().timestamp()
+                _save_sessions()
+            
             # 发送完成事件，确保连接正常结束
             yield f"event: done\ndata: {json.dumps({'content': full_content})}\n\n"
     
