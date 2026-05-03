@@ -55,9 +55,11 @@ class BaseWorker(ABC):
         return {tool.name: tool for tool in all_tools}
 
     def _init_react_agent(self, extra_tools: Optional[List[BaseTool]] = None) -> None:
-        """初始化 ReAct Agent，支持动态工具注入"""
+        """初始化 ReAct Agent，支持动态工具注入（含 MCP 工具）"""
         system_prompt = self._get_system_prompt()
         all_tools = list(self._base_tools)
+        # 注入 MCP 工具
+        all_tools.extend(self._get_mcp_tools())
         if extra_tools:
             all_tools.extend(extra_tools)
 
@@ -78,20 +80,23 @@ class BaseWorker(ABC):
         return self._llm
 
     def get_tools(self) -> List[BaseTool]:
-        """获取工具列表，包括本地工具和 MCP 工具"""
+        """获取工具列表，包括本地工具、MCP 工具和强制注入工具"""
         tools = list(self._base_tools)
-
-        # 添加 MCP 工具
-        try:
-            mcp_tools = mcp_tool_registry.get_all_tools()
-            tools.extend(mcp_tools)
-        except Exception:
-            pass
-
+        tools.extend(self._get_mcp_tools())
+        tools.extend(self._force_tools)
         return tools
+
+    def _get_mcp_tools(self) -> List[BaseTool]:
+        """获取 MCP 远程工具列表"""
+        try:
+            return mcp_tool_registry.get_all_tools()
+        except Exception:
+            return []
 
     def bind_tools(self, extra_tools: Optional[List[BaseTool]] = None) -> Any:
         all_tools = list(self._base_tools)
+        # 注入 MCP 工具
+        all_tools.extend(self._get_mcp_tools())
         if extra_tools:
             all_tools.extend(extra_tools)
         if all_tools:

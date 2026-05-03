@@ -26,6 +26,8 @@ from miniclaw.tools.reminder import (
 from miniclaw.tools.scheduler import scheduler
 from miniclaw.tools.weather import fetch_weather, get_weather_suggestion
 from miniclaw.tools.news import fetch_news
+from miniclaw.mcp.tools import mcp_tool_registry
+from miniclaw.mcp.manager import init_mcp, close_mcp
 from miniclaw.config.settings import settings
 
 
@@ -35,13 +37,22 @@ app_state = {"miniclaw_app": None}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_data_dirs()
-    
+
+    # 初始化 MCP 连接和工具注册表
+    try:
+        await init_mcp()
+        await mcp_tool_registry.initialize()
+        logger.info(f"MCP tools initialized: {len(mcp_tool_registry.get_all_tools())} tools")
+    except Exception as e:
+        logger.warning(f"MCP initialization skipped: {e}")
+
     app_state["miniclaw_app"] = MiniClawApp()
-    
+
     logger.info("MiniClaw API started")
     yield
-    
+
     scheduler.stop()
+    await close_mcp()
     logger.info("MiniClaw API stopped")
 
 
