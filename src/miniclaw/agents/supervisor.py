@@ -16,7 +16,7 @@ from miniclaw.core.state import MiniClawState
 from miniclaw.utils.llm import get_smart_llm
 
 
-class WorkerAgent(str, Enum):
+class WorkerType(str, Enum):
     """Worker Agent 类型枚举"""
     LEARNING = "learning"
     TASK = "task"
@@ -29,32 +29,32 @@ class WorkerAgent(str, Enum):
 
 # Worker Agent 定义
 WORKER_DEFINITIONS = {
-    WorkerAgent.LEARNING: {
+    WorkerType.LEARNING: {
         "name": "learning_agent",
         "description": "学习规划助手，帮助制定学习计划、追踪进度、安排复习",
         "tools": ["create_study_plan", "generate_excel_plan", "schedule_review"],
     },
-    WorkerAgent.TASK: {
+    WorkerType.TASK: {
         "name": "task_agent",
         "description": "任务管理助手，管理TODO清单、创建任务、生成每日报告",
         "tools": ["create_task", "list_tasks", "complete_task", "generate_daily_summary"],
     },
-    WorkerAgent.INFO: {
+    WorkerType.INFO: {
         "name": "info_agent",
         "description": "信息获取助手，查询天气、推送新闻、知识问答",
         "tools": ["get_weather", "get_news", "search_knowledge"],
     },
-    WorkerAgent.HEALTH: {
+    WorkerType.HEALTH: {
         "name": "health_agent",
         "description": "健康提醒助手，定时提醒休息、管理作息、提供健康建议",
         "tools": ["set_reminder", "get_greeting", "get_health_tips"],
     },
-    WorkerAgent.DATA: {
+    WorkerType.DATA: {
         "name": "data_agent",
         "description": "数据处理助手，操作Excel表格、数据分析",
         "tools": ["create_excel_file", "read_excel_file", "analyze_data", "update_excel_cell"],
     },
-    WorkerAgent.CHAT: {
+    WorkerType.CHAT: {
         "name": "chat_agent",
         "description": "日常聊天助手，处理一般对话和引导用户使用功能",
         "tools": [],
@@ -123,12 +123,12 @@ class SupervisorAgent:
     def __init__(
         self,
         llm: Optional[BaseChatModel] = None,
-        workers: Optional[List[WorkerAgent]] = None,
+        workers: Optional[List[WorkerType]] = None,
     ):
         self._llm = llm or get_smart_llm()
-        self._workers = workers or list(WorkerAgent)
-        if WorkerAgent.FINISH not in self._workers:
-            self._workers.append(WorkerAgent.FINISH)
+        self._workers = workers or list(WorkerType)
+        if WorkerType.FINISH not in self._workers:
+            self._workers.append(WorkerType.FINISH)
 
         # 构建系统提示词
         self._system_prompt = SUPERVISOR_SYSTEM_PROMPT.format(
@@ -169,7 +169,7 @@ class SupervisorAgent:
 
         return "\n".join(context_parts)
 
-    async def route(self, state: MiniClawState) -> Command[Literal[tuple([w.value for w in WorkerAgent])]]:
+    async def route(self, state: MiniClawState) -> Command[Literal[tuple([w.value for w in WorkerType])]]:
         """
         Supervisor 路由决策
 
@@ -213,16 +213,16 @@ class SupervisorAgent:
             next_agent = self._parse_agent_from_response(content)
 
         # 验证并返回 Command
-        if next_agent == WorkerAgent.FINISH.value:
-            return Command(goto=WorkerAgent.FINISH.value)
+        if next_agent == WorkerType.FINISH.value:
+            return Command(goto=WorkerType.FINISH.value)
 
         # 检查是否是有效的 Worker
-        valid_workers = [w.value for w in self._workers if w != WorkerAgent.FINISH]
+        valid_workers = [w.value for w in self._workers if w != WorkerType.FINISH]
         if next_agent in valid_workers:
             return Command(goto=next_agent)
 
         # 默认路由到 chat
-        return Command(goto=WorkerAgent.CHAT.value)
+        return Command(goto=WorkerType.CHAT.value)
 
     def _parse_agent_from_response(self, content: str) -> str:
         """从 LLM 响应中解析 Agent 名称"""
@@ -230,22 +230,22 @@ class SupervisorAgent:
 
         # 检查是否包含 FINISH
         if "finish" in content or "完成" in content or "结束" in content:
-            return WorkerAgent.FINISH.value
+            return WorkerType.FINISH.value
 
         # 检查各个 Worker
-        for worker in WorkerAgent:
-            if worker == WorkerAgent.FINISH:
+        for worker in WorkerType:
+            if worker == WorkerType.FINISH:
                 continue
             if worker.value in content:
                 return worker.value
 
         # 默认返回 chat
-        return WorkerAgent.CHAT.value
+        return WorkerType.CHAT.value
 
     def get_worker_info(self, worker_name: str) -> Optional[Dict[str, Any]]:
         """获取 Worker Agent 信息"""
         try:
-            worker = WorkerAgent(worker_name)
+            worker = WorkerType(worker_name)
             return WORKER_DEFINITIONS.get(worker)
         except ValueError:
             return None

@@ -7,7 +7,7 @@ from typing import Optional, Any
 
 from langchain_core.tools import tool
 
-from miniclaw.agents.worker import WorkerAgent
+from miniclaw.agents.worker import BaseWorker
 from miniclaw.utils.helpers import load_prompt_template
 from miniclaw.rag.rag_tools import rag_search, rag_add_documents, rag_add_directory, rag_list_kbs, rag_delete_kb
 
@@ -53,7 +53,7 @@ def get_news(category: str = "all", count: int = 5) -> list:
         return [{"error": str(e), "message": "无法获取新闻，请稍后重试"}]
 
 
-class InfoAgent(WorkerAgent):
+class InfoAgent(BaseWorker):
     """
     信息获取 Worker Agent
 

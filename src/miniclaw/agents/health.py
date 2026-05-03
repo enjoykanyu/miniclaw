@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from langchain_core.tools import tool
 
-from miniclaw.agents.worker import WorkerAgent
+from miniclaw.agents.worker import BaseWorker
 from miniclaw.utils.helpers import load_prompt_template, format_datetime
 
 
@@ -100,7 +100,7 @@ def get_health_tips(situation: str) -> str:
     return tips.get(situation, "保持健康的生活习惯，定时休息，多喝水！")
 
 
-class HealthAgent(WorkerAgent):
+class HealthAgent(BaseWorker):
     """
     健康提醒 Worker Agent
 

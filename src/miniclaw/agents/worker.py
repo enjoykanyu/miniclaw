@@ -19,7 +19,7 @@ from miniclaw.utils.llm import get_llm, get_smart_llm
 from miniclaw.mcp.tools import mcp_tool_registry
 
 
-class WorkerAgent(ABC):
+class BaseWorker(ABC):
     """
     Worker Agent 基类
 
@@ -206,13 +206,8 @@ class WorkerAgent(ABC):
         """
         单次调用模式执行（支持强制工具注入）
         """
-        import logging
-        logger = logging.getLogger(__name__)
-
         user_message = self.get_last_user_message(state)
         system_prompt = self._get_system_prompt()
-
-        logger.info(f"[Worker:{self.name}] user_message={user_message!r}")
 
         # 追加强制使用工具的提示词
         force_prompt = self._build_force_prompt(state)
@@ -229,15 +224,11 @@ class WorkerAgent(ABC):
         llm_with_tools = self.bind_tools(self._force_tools)
         response = await llm_with_tools.ainvoke(messages)
 
-        logger.info(f"[Worker:{self.name}] response type={type(response)}, content={getattr(response, 'content', repr(response))!r}")
-
         # 处理工具调用
         if hasattr(response, "tool_calls") and response.tool_calls:
             final_content = await self._handle_tool_calls(response.tool_calls, messages, response)
         else:
             final_content = response.content
-
-        logger.info(f"[Worker:{self.name}] final_content={final_content!r}")
 
         return {
             "current_agent": self.name,

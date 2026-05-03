@@ -11,7 +11,7 @@ from langgraph.types import Command
 from miniclaw.core.state import MiniClawState, create_initial_state
 from miniclaw.core.exceptions import MiniClawException, MiniClawErrorCode, AgentException
 from miniclaw.core.error_handler import error_handler, retry_with_fallback, safe_execute
-from miniclaw.agents.supervisor import SupervisorAgent, WorkerAgent as WorkerType
+from miniclaw.agents.supervisor import SupervisorAgent, WorkerType
 
 logger = logging.getLogger(__name__)
 

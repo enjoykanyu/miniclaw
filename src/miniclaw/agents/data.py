@@ -7,7 +7,7 @@ from typing import Optional, List, Any
 
 from langchain_core.tools import tool
 
-from miniclaw.agents.worker import WorkerAgent
+from miniclaw.agents.worker import BaseWorker
 from miniclaw.utils.helpers import load_prompt_template
 
 
@@ -98,7 +98,7 @@ def update_excel_cell(filename: str, row: int, column: str, value: str) -> str:
         return f"❌ 更新失败: {str(e)}"
 
 
-class DataAgent(WorkerAgent):
+class DataAgent(BaseWorker):
     """
     数据处理 Worker Agent
 

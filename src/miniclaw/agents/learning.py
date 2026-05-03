@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from langchain_core.tools import tool
 
-from miniclaw.agents.worker import WorkerAgent
+from miniclaw.agents.worker import BaseWorker
 from miniclaw.utils.helpers import load_prompt_template, format_datetime
 
 
@@ -104,7 +104,7 @@ def schedule_review(plan_id: str, stage: int) -> dict:
     }
 
 
-class LearningAgent(WorkerAgent):
+class LearningAgent(BaseWorker):
     """
     学习规划 Worker Agent
 

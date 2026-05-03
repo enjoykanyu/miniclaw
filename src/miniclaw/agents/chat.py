@@ -3,7 +3,7 @@ MiniClaw Chat Agent - Worker Agent
 Handles general conversation and fallback responses
 """
 
-from miniclaw.agents.worker import WorkerAgent
+from miniclaw.agents.worker import BaseWorker
 
 
 CHAT_SYSTEM_PROMPT = """你是MiniClaw，一个友好、智能的个人助手。
@@ -26,7 +26,7 @@ CHAT_SYSTEM_PROMPT = """你是MiniClaw，一个友好、智能的个人助手。
 """
 
 
-class ChatAgent(WorkerAgent):
+class ChatAgent(BaseWorker):
     """
     日常聊天 Worker Agent
 

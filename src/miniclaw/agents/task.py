@@ -8,7 +8,7 @@ from datetime import datetime
 
 from langchain_core.tools import tool
 
-from miniclaw.agents.worker import WorkerAgent
+from miniclaw.agents.worker import BaseWorker
 from miniclaw.utils.helpers import load_prompt_template, format_datetime
 
 
@@ -86,7 +86,7 @@ def generate_daily_summary(date: str) -> dict:
     }
 
 
-class TaskAgent(WorkerAgent):
+class TaskAgent(BaseWorker):
     """
     任务管理 Worker Agent
 
