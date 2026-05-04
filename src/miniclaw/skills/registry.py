@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 from typing import List, Optional
+from loguru import logger
+
 @dataclass
 class Skill:
     name: str
@@ -36,7 +38,7 @@ class SkillRegistry:
             self._skills[skill.name] = skill
         
         self._loaded = True
-        print(f"[SkillRegistry] 加载了 {len(self._skills)} 个 skills: {list(self._skills.keys())}")
+        logger.info(f"[SkillRegistry] 加载了 {len(self._skills)} 个 skills: {list(self._skills.keys())}")
     
     def get(self, name: str) -> Optional[Skill]:
         """按名称获取 skill"""
