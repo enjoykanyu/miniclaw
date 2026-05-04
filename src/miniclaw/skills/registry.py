@@ -1,15 +1,22 @@
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import List, Optional, Dict, Any
 from loguru import logger
+
+@dataclass
+class SkillToolDef:
+    """Skill 中定义的工具配置"""
+    name: str
+    condition: Optional[str] = None  # 注入条件，如 "force_search"
+    required: bool = False           # 是否强制要求调用
 
 @dataclass
 class Skill:
     name: str
     description: str
     agent: str           # 绑定到哪个 Agent，如 "info"
-    tools: List[str]     # 需要的工具列表
-    content: str         # SKILL.md 中 YAML 后面的 Markdown 内容
-    source: str          # 文件路径，用于调试
+    tools: List[SkillToolDef] = field(default_factory=list)  # 工具定义列表
+    content: str = ""    # SKILL.md 中 YAML 后面的 Markdown 内容
+    source: str = ""     # 文件路径，用于调试
 
 
 class SkillRegistry:
@@ -60,7 +67,8 @@ class SkillRegistry:
         skills = self.get_for_agent(agent_name)
         tools = set()
         for skill in skills:
-            tools.update(skill.tools)
+            for tool_def in skill.tools:
+                tools.add(tool_def.name)
         return list(tools)
     
     def build_prompt_for_agent(self, agent_name: str) -> str:
