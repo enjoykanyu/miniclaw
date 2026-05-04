@@ -69,6 +69,8 @@ class MiniClawState(TypedDict):
     rag_sources: Optional[List[dict]]
     needs_rag: Optional[bool]
 
+    force_search_context: Optional[str]
+
     metadata: Optional[dict]
     created_at: Optional[str]
     updated_at: Optional[str]
@@ -96,6 +98,7 @@ def create_initial_state(user_id: str, session_id: str) -> MiniClawState:
         rag_context=None,
         rag_sources=[],
         needs_rag=None,
+        force_search_context=None,
         metadata={},
         created_at=now,
         updated_at=now,

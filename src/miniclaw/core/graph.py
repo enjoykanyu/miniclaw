@@ -255,6 +255,8 @@ class MiniClawApp:
         user_id: str = "default",
         session_id: str = "default",
         thread_id: str = "default",
+        force_think: bool = False,
+        force_search: bool = False,
     ) -> str:
         """
         同步聊天接口（带完整异常处理）
@@ -265,6 +267,15 @@ class MiniClawApp:
 
         initial_state = create_initial_state(user_id, session_id)
         initial_state["messages"] = [HumanMessage(content=message)]
+        initial_state["metadata"] = {
+            "force_think": force_think,
+            "force_search": force_search,
+        }
+
+        if force_search:
+            search_context = await self._execute_force_search(message)
+            if search_context:
+                initial_state["force_search_context"] = search_context
 
         try:
             result = await self.graph.ainvoke(initial_state, config)
@@ -315,18 +326,43 @@ class MiniClawApp:
 
         initial_state = create_initial_state(user_id, session_id)
         initial_state["messages"] = [HumanMessage(content=message)]
+        initial_state["metadata"] = {
+            "force_think": force_think,
+            "force_search": force_search,
+        }
+
+        # 当 force_search=True 时，程序化执行搜索并注入上下文
+        if force_search:
+            search_context = await self._execute_force_search(message)
+            if search_context:
+                initial_state["force_search_context"] = search_context
 
         try:
-            # 使用 astream_events 获取真正的流式 token
             async for event in self.graph.astream_events(
                 initial_state, config, version="v2"
             ):
                 yield event
         except Exception as e:
             logger.error(f"Stream processing error: {e}")
-            # 返回错误事件
             yield {
                 "error": True,
                 "message": "流式处理出现错误",
                 "details": str(e),
             }
+
+    async def _execute_force_search(self, query: str) -> str:
+        """
+        程序化执行联网搜索（不依赖 LLM 决策）
+
+        这是商业产品（豆包/DeepSeek/GLM）的做法：
+        当用户点击联网搜索按钮时，在 LLM 调用之前，
+        先程序化地执行搜索，将结果注入上下文。
+        """
+        try:
+            from miniclaw.tools.trail import trail
+            result = trail.invoke({"query": query})
+            logger.info(f"Force search executed for: {query}")
+            return result
+        except Exception as e:
+            logger.error(f"Force search failed: {e}")
+            return f"联网搜索失败: {str(e)}"
