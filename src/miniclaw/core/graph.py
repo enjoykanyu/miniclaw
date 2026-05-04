@@ -354,15 +354,34 @@ class MiniClawApp:
         """
         程序化执行联网搜索（不依赖 LLM 决策）
 
-        这是商业产品（豆包/DeepSeek/GLM）的做法：
         当用户点击联网搜索按钮时，在 LLM 调用之前，
         先程序化地执行搜索，将结果注入上下文。
+
+        这里直接调用搜索函数，绕过 LangChain Tool 抽象层，
+        避免序列化/反序列化问题。
         """
+        import asyncio
+
         try:
-            from miniclaw.tools.trail import trail
-            result = trail.invoke({"query": query})
-            logger.info(f"Force search executed for: {query}")
-            return result
+            from miniclaw.config.settings import settings
+
+            tavily_key = settings.TAVILY_API_KEY
+
+            if tavily_key:
+                from miniclaw.tools.trail import _search_tavily
+                result = await asyncio.to_thread(_search_tavily, query, 5, tavily_key)
+                logger.info(f"Force search (Tavily) executed for: {query}, result length: {len(result)}")
+                return result
+
+            try:
+                from miniclaw.tools.trail import _search_duckduckgo
+                result = await asyncio.to_thread(_search_duckduckgo, query, 5)
+                logger.info(f"Force search (DuckDuckGo) executed for: {query}, result length: {len(result)}")
+                return result
+            except ImportError:
+                logger.warning("DuckDuckGo not installed, force search unavailable")
+                return ""
+
         except Exception as e:
-            logger.error(f"Force search failed: {e}")
-            return f"联网搜索失败: {str(e)}"
+            logger.error(f"Force search failed: {e}", exc_info=True)
+            return ""

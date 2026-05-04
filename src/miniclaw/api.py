@@ -370,32 +370,41 @@ async def chat_stream(request: ChatRequest):
                                 data = event.get("data", {})
                                 output = data.get("output", {})
                                 # logger.info(f"[SSE] Extracting content from {node_name}, output type={type(output)}, output={output}")
+
+                                extracted_content = None
+
+                                # 优先从 agent_response 提取（最可靠）
+                                if isinstance(output, dict) and output.get("agent_response"):
+                                    extracted_content = output["agent_response"]
                                 # 处理 Command 对象
-                                if hasattr(output, "update") and callable(getattr(output, "update", None)) is False:
-                                    # 确保 update 是属性而不是方法
+                                elif hasattr(output, "update") and callable(getattr(output, "update", None)) is False:
                                     update_data = output.update
                                     if isinstance(update_data, dict):
-                                        messages = update_data.get("messages", [])
-                                        for msg in messages:
-                                            if hasattr(msg, "content") and msg.content:
-                                                if msg.content != full_content:
-                                                    full_content = msg.content
-                                                    yield f"event: token\ndata: {json.dumps({'content': msg.content})}\n\n"
+                                        if update_data.get("agent_response"):
+                                            extracted_content = update_data["agent_response"]
+                                        else:
+                                            msgs = update_data.get("messages", [])
+                                            for msg in msgs:
+                                                if hasattr(msg, "content") and msg.content:
+                                                    extracted_content = msg.content
+                                                    break
+                                # 处理字典格式
+                                elif isinstance(output, dict):
+                                    msgs = output.get("messages", [])
+                                    for msg in msgs:
+                                        if hasattr(msg, "content") and msg.content:
+                                            extracted_content = msg.content
+                                            break
                                 # 处理普通消息列表
                                 elif isinstance(output, list):
                                     for msg in output:
                                         if hasattr(msg, "content") and msg.content:
-                                            if msg.content != full_content:
-                                                full_content = msg.content
-                                                yield f"event: token\ndata: {json.dumps({'content': msg.content})}\n\n"
-                                # 处理字典格式
-                                elif isinstance(output, dict):
-                                    messages = output.get("messages", [])
-                                    for msg in messages:
-                                        if hasattr(msg, "content") and msg.content:
-                                            if msg.content != full_content:
-                                                full_content = msg.content
-                                                yield f"event: token\ndata: {json.dumps({'content': msg.content})}\n\n"
+                                            extracted_content = msg.content
+                                            break
+
+                                if extracted_content and extracted_content != full_content:
+                                    full_content = extracted_content
+                                    yield f"event: token\ndata: {json.dumps({'content': extracted_content})}\n\n"
                     
                     # 流式 token
                     elif event_type == "on_chat_model_stream":
