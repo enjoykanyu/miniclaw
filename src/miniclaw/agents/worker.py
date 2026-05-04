@@ -57,6 +57,60 @@ class BaseWorker(ABC):
         all_tools.extend(self._force_tools)
         return {tool.name: tool for tool in all_tools}
 
+    def _load_tool_by_name(self, tool_name: str) -> Optional[BaseTool]:
+        """
+        根据工具名称动态加载工具实例
+
+        这是 Skill 系统的核心工具加载器。Skill 只声明工具名称，
+        实际的工具实例由此方法动态查找并返回。
+
+        查找优先级：
+        1. 已加载的基础工具 (_base_tools)
+        2. MCP 远程工具 (_get_mcp_tools)
+        3. 内置工具模块动态导入 (miniclaw.tools.*)
+
+        Args:
+            tool_name: 工具名称，如 "tavily", "think", "get_news"
+
+        Returns:
+            BaseTool 实例，如果找不到则返回 None
+        """
+        # 1. 检查已加载的基础工具
+        for tool in self._base_tools:
+            if tool.name == tool_name:
+                return tool
+
+        # 2. 检查 MCP 工具
+        mcp_tools = self._get_mcp_tools()
+        for tool in mcp_tools:
+            if tool.name == tool_name:
+                return tool
+
+        # 3. 动态导入内置工具模块
+        # 支持的工具模块映射
+        builtin_modules = {
+            "tavily": "miniclaw.tools.tavily",
+            "think": "miniclaw.tools.think",
+            "trail": "miniclaw.tools.trail",
+        }
+
+        module_path = builtin_modules.get(tool_name)
+        if module_path:
+            try:
+                import importlib
+                module = importlib.import_module(module_path)
+                # 工具在模块中通常以函数名或变量名暴露
+                if hasattr(module, tool_name):
+                    tool = getattr(module, tool_name)
+                    # 确保是有效的工具（有 name 属性，且是 BaseTool 或 callable）
+                    if hasattr(tool, "name"):
+                        return tool
+            except Exception as e:
+                logger.warning(f"动态加载工具 '{tool_name}' 失败: {e}")
+
+        logger.warning(f"找不到工具 '{tool_name}'，请检查 Skill 配置或工具模块")
+        return None
+
     def _init_react_agent(self, extra_tools: Optional[List[BaseTool]] = None) -> None:
         """初始化 ReAct Agent，支持动态工具注入（含 MCP 工具）"""
         system_prompt = self._get_system_prompt()
