@@ -10,6 +10,7 @@ from langchain_core.tools import tool
 from miniclaw.agents.worker import BaseWorker
 from miniclaw.utils.helpers import load_prompt_template
 from miniclaw.rag.rag_tools import rag_search, rag_add_documents, rag_add_directory, rag_list_kbs, rag_delete_kb
+from miniclaw.tools.trail import trail
 
 
 @tool
@@ -68,7 +69,7 @@ class InfoAgent(BaseWorker):
 
     def __init__(self, llm=None, tools=None, use_react: bool = False):
         if tools is None:
-            tools = [get_weather, get_news, rag_search, rag_add_documents, rag_add_directory, rag_list_kbs, rag_delete_kb]
+            tools = [get_weather, get_news, trail, rag_search, rag_add_documents, rag_add_directory, rag_list_kbs, rag_delete_kb]
         super().__init__(llm=llm, tools=tools, use_react=use_react)
         self._prompts = load_prompt_template("info")
 
@@ -76,12 +77,15 @@ class InfoAgent(BaseWorker):
         """获取信息获取的系统提示词"""
         return self._prompts.get("system", """你是信息获取助手，帮助用户查询天气、新闻和知识。
 
-你可以：
-1. 查询指定城市的天气信息
-2. 获取最新新闻头条（科技、财经、国际等分类）
-3. 搜索知识库获取相关信息
+你可以使用以下工具来获取实时信息：
+1. `get_weather` - 查询指定城市的天气信息
+2. `get_news` - 获取最新新闻头条（科技、财经、国际等分类）
+3. `rag_search` - 搜索知识库获取相关信息
 
-请提供准确、及时的信息。""")
+重要规则：
+- 当用户询问天气、新闻、实时信息或知识库内容时，你必须先调用对应的工具获取数据，再基于工具结果回答。
+- 不要依赖你的训练数据回答时效性问题，必须调用工具获取最新信息。
+- 如果工具返回错误或没有数据，请如实告知用户。""")
 
     def format_tool_result(self, tool_name: str, result: Any) -> Optional[str]:
         """自定义工具结果格式化"""
