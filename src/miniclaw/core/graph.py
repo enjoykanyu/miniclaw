@@ -3,7 +3,7 @@ MiniClaw LangGraph Workflow - Supervisor Multi-Agent Pattern with RAG
 """
 
 import logging
-from typing import Dict, Any, Literal, Optional
+from typing import Dict, Any, Literal, Optional, List
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
@@ -257,6 +257,8 @@ class MiniClawApp:
         thread_id: str = "default",
         force_think: bool = False,
         force_search: bool = False,
+        selected_kbs: Optional[List[str]] = None,
+        kb_retrieval_mode: Optional[str] = "intent",
     ) -> str:
         """
         同步聊天接口（带完整异常处理）
@@ -270,6 +272,8 @@ class MiniClawApp:
         initial_state["metadata"] = {
             "force_think": force_think,
             "force_search": force_search,
+            "selected_kbs": selected_kbs,
+            "kb_retrieval_mode": kb_retrieval_mode,
         }
 
         if force_search:
@@ -316,6 +320,8 @@ class MiniClawApp:
         thread_id: str = "default",
         force_think: bool = False,
         force_search: bool = False,
+        selected_kbs: Optional[List[str]] = None,
+        kb_retrieval_mode: Optional[str] = "intent",
     ):
         """
         流式聊天接口（带异常处理）
@@ -329,6 +335,8 @@ class MiniClawApp:
         initial_state["metadata"] = {
             "force_think": force_think,
             "force_search": force_search,
+            "selected_kbs": selected_kbs,
+            "kb_retrieval_mode": kb_retrieval_mode,
         }
 
         # 当 force_search=True 时，程序化执行搜索并注入上下文

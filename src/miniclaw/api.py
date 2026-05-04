@@ -10,7 +10,7 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, UploadFile, File as FastAPIFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -79,6 +79,8 @@ class ChatRequest(BaseModel):
     thread_id: Optional[str] = Field(default=None, description="Thread ID for conversation continuity")
     force_think: bool = Field(default=False, description="Force enable deep thinking")
     force_search: bool = Field(default=False, description="Force enable web search")
+    selected_kbs: Optional[List[str]] = Field(default=None, description="Selected knowledge base names for retrieval")
+    kb_retrieval_mode: Optional[str] = Field(default="intent", description="KB retrieval mode: intent or force")
 
 
 class ChatResponse(BaseModel):
@@ -117,6 +119,15 @@ class FileRequest(BaseModel):
 
 class ConfigRagModeRequest(BaseModel):
     enabled: bool = Field(..., description="Enable or disable RAG mode")
+
+
+class KbCreateRequest(BaseModel):
+    name: str = Field(..., description="Knowledge base name")
+    description: str = Field(default="", description="Knowledge base description")
+
+
+class KbRenameRequest(BaseModel):
+    name: str = Field(..., description="New knowledge base name")
 
 
 def get_miniclaw_app() -> MiniClawApp:
@@ -254,6 +265,8 @@ async def chat(request: ChatRequest):
             thread_id=request.thread_id or request.user_id,
             force_think=request.force_think,
             force_search=request.force_search,
+            selected_kbs=request.selected_kbs,
+            kb_retrieval_mode=request.kb_retrieval_mode,
         )
         
         return ChatResponse(
@@ -307,6 +320,8 @@ async def chat_stream(request: ChatRequest):
                 thread_id=request.thread_id or request.user_id,
                 force_think=request.force_think,
                 force_search=request.force_search,
+                selected_kbs=request.selected_kbs,
+                kb_retrieval_mode=request.kb_retrieval_mode,
             ):
                 # logger.info(f"ALL EVENT: {type(event).__name__} = {event}")
                 if isinstance(event, dict):
@@ -727,3 +742,285 @@ async def get_rag_mode():
 @app.put("/config/rag-mode")
 async def put_rag_mode(request: ConfigRagModeRequest):
     return {"enabled": request.enabled}
+
+
+# ============================================================
+# Knowledge Base Management API
+# ============================================================
+
+@app.get("/knowledge-bases")
+async def list_knowledge_bases():
+    """List all knowledge bases with stats"""
+    try:
+        from miniclaw.rag.service import get_rag_service
+        rag_service = get_rag_service()
+        kb_names = rag_service.list_kbs()
+        result = []
+        for name in kb_names:
+            kb = rag_service.get_kb(name)
+            if kb:
+                stats = kb.get_stats()
+                meta_path = os.path.join(kb.persist_dir, "kb_meta.json")
+                description = ""
+                if os.path.exists(meta_path):
+                    try:
+                        with open(meta_path, "r", encoding="utf-8") as f:
+                            meta = json.load(f)
+                            description = meta.get("description", "")
+                    except Exception:
+                        pass
+                result.append({
+                    "name": name,
+                    "description": description,
+                    "document_count": stats.get("document_count", 0),
+                    "index_size": stats.get("index_size", 0),
+                    "has_index": stats.get("has_index", False),
+                    "updated_at": meta.get("updated_at", "") if os.path.exists(meta_path) else "",
+                })
+        return {"knowledge_bases": result, "count": len(result)}
+    except Exception as e:
+        logger.error(f"List KBs error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/knowledge-bases")
+async def create_knowledge_base(request: KbCreateRequest):
+    """Create a new knowledge base"""
+    try:
+        from miniclaw.rag.service import get_rag_service
+        rag_service = get_rag_service()
+        if request.name in rag_service.list_kbs():
+            raise HTTPException(status_code=409, detail=f"Knowledge base '{request.name}' already exists")
+        kb = rag_service.create_kb(request.name, request.description)
+        return {
+            "name": request.name,
+            "description": request.description,
+            "document_count": 0,
+            "message": f"Knowledge base '{request.name}' created successfully",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Create KB error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/knowledge-bases/{kb_name}")
+async def get_knowledge_base(kb_name: str):
+    """Get knowledge base details"""
+    try:
+        from miniclaw.rag.service import get_rag_service
+        rag_service = get_rag_service()
+        kb = rag_service.get_kb(kb_name)
+        if kb is None:
+            raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
+        stats = kb.get_stats()
+        meta_path = os.path.join(kb.persist_dir, "kb_meta.json")
+        description = ""
+        if os.path.exists(meta_path):
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                    description = meta.get("description", "")
+            except Exception:
+                pass
+        return {
+            "name": kb_name,
+            "description": description,
+            "document_count": stats.get("document_count", 0),
+            "index_size": stats.get("index_size", 0),
+            "has_index": stats.get("has_index", False),
+            "persist_dir": kb.persist_dir,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get KB error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/knowledge-bases/{kb_name}")
+async def update_knowledge_base(kb_name: str, request: KbRenameRequest):
+    """Update knowledge base name/description"""
+    try:
+        from miniclaw.rag.service import get_rag_service
+        import shutil
+        rag_service = get_rag_service()
+        kb = rag_service.get_kb(kb_name)
+        if kb is None:
+            raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
+        if request.name != kb_name:
+            old_dir = kb.persist_dir
+            new_dir = os.path.join(rag_service.kb_base_dir, request.name)
+            if os.path.exists(new_dir):
+                raise HTTPException(status_code=409, detail=f"Knowledge base '{request.name}' already exists")
+            shutil.move(old_dir, new_dir)
+            kb.name = request.name
+            kb.persist_dir = new_dir
+            rag_service._knowledge_bases.pop(kb_name, None)
+            rag_service._knowledge_bases[request.name] = kb
+        kb.description = request.description
+        kb._save_kb_meta(0, is_incremental=True)
+        return {"name": request.name, "description": request.description, "message": "Updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Update KB error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/knowledge-bases/{kb_name}")
+async def delete_knowledge_base(kb_name: str):
+    """Delete a knowledge base"""
+    try:
+        from miniclaw.rag.service import get_rag_service
+        rag_service = get_rag_service()
+        if not rag_service.delete_kb(kb_name):
+            raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
+        return {"message": f"Knowledge base '{kb_name}' deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete KB error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/knowledge-bases/{kb_name}/documents")
+async def upload_documents(kb_name: str, file_paths: List[str] = Query(..., description="File paths to add")):
+    """Add documents to a knowledge base (from server file paths)"""
+    try:
+        from miniclaw.rag.service import get_rag_service
+        rag_service = get_rag_service()
+        kb = rag_service.get_kb(kb_name)
+        if kb is None:
+            raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
+        count = kb.add_files(file_paths)
+        return {
+            "knowledge_base": kb_name,
+            "added_count": count,
+            "message": f"Added {count} document chunks to '{kb_name}'",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Upload docs error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/knowledge-bases/{kb_name}/upload")
+async def upload_file_to_kb(kb_name: str, files: list[UploadFile] = FastAPIFile(...)):
+    """Upload files directly to a knowledge base (multipart/form-data)
+
+    Supports: markdown, pdf, txt, code files, etc.
+    Process: upload → save temp → parse → chunk → embedding → store in vector DB
+    """
+    import tempfile
+    import shutil
+
+    try:
+        from miniclaw.rag.service import get_rag_service
+        rag_service = get_rag_service()
+        kb = rag_service.get_kb(kb_name)
+        if kb is None:
+            raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
+
+        temp_dir = tempfile.mkdtemp(prefix="miniclaw_upload_")
+        saved_paths = []
+        upload_results = []
+
+        for upload_file in files:
+            if not upload_file.filename:
+                continue
+
+            safe_name = os.path.basename(upload_file.filename)
+            temp_path = os.path.join(temp_dir, safe_name)
+
+            with open(temp_path, "wb") as f:
+                content = await upload_file.read()
+                f.write(content)
+
+            saved_paths.append(temp_path)
+            upload_results.append({
+                "filename": safe_name,
+                "size": len(content),
+                "temp_path": temp_path,
+            })
+            logger.info(f"Uploaded file: {safe_name} -> {temp_path}")
+
+        if not saved_paths:
+            raise HTTPException(status_code=400, detail="No valid files uploaded")
+
+        # Process: parse → chunk → embedding → store
+        count = kb.add_files(saved_paths)
+
+        # Clean up temp files
+        try:
+            shutil.rmtree(temp_dir)
+        except Exception:
+            pass
+
+        return {
+            "knowledge_base": kb_name,
+            "uploaded_files": [r["filename"] for r in upload_results],
+            "added_chunks": count,
+            "message": f"Successfully processed {len(upload_results)} files, added {count} chunks to '{kb_name}'",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Upload file error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/knowledge-bases/{kb_name}/documents")
+async def list_kb_documents(kb_name: str):
+    """List documents in a knowledge base"""
+    try:
+        from miniclaw.rag.service import get_rag_service
+        rag_service = get_rag_service()
+        kb = rag_service.get_kb(kb_name)
+        if kb is None:
+            raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
+        kb.vectorstore._ensure_loaded()
+        docs = kb.vectorstore._documents
+        result = []
+        seen_sources = set()
+        for doc in docs:
+            source = doc.metadata.get("source", "unknown")
+            if source not in seen_sources:
+                seen_sources.add(source)
+                result.append({
+                    "source": source,
+                    "type": doc.metadata.get("type", "unknown"),
+                    "chunk_count": sum(1 for d in docs if d.metadata.get("source") == source),
+                })
+        return {
+            "knowledge_base": kb_name,
+            "documents": result,
+            "total_chunks": len(docs),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"List docs error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/knowledge-bases/{kb_name}/documents")
+async def clear_kb_documents(kb_name: str):
+    """Clear all documents from a knowledge base"""
+    try:
+        from miniclaw.rag.service import get_rag_service
+        rag_service = get_rag_service()
+        kb = rag_service.get_kb(kb_name)
+        if kb is None:
+            raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
+        kb.vectorstore.delete_all()
+        kb._save_kb_meta(0, is_incremental=False)
+        return {"message": f"All documents cleared from '{kb_name}'"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Clear docs error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
