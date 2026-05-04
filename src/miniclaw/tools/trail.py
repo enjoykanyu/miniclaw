@@ -7,10 +7,12 @@ Trail Tool - 联网搜索工具
 实现方式：使用 Tavily 或类似的搜索 API 进行实时网络搜索。
 """
 
-import os
 from typing import Optional
 
 from langchain_core.tools import tool
+from loguru import logger
+
+from miniclaw.config.settings import settings
 
 
 @tool
@@ -31,9 +33,11 @@ def trail(query: str, max_results: int = 5) -> str:
     Returns:
         搜索结果的摘要，包含标题、摘要和来源链接
     """
+    logger.info(f"Trail Tool: {query}")
+
     try:
-        # 优先使用 Tavily API（需要 TAVILY_API_KEY 环境变量）
-        tavily_key = os.getenv("TAVILY_API_KEY")
+        # 优先使用 Tavily API（从统一配置读取）
+        tavily_key = settings.TAVILY_API_KEY
         if tavily_key:
             return _search_tavily(query, max_results, tavily_key)
 

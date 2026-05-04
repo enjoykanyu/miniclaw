@@ -74,6 +74,11 @@ class Settings(BaseSettings):
 
     NEWS_API_KEY: Optional[str] = Field(default=None)
 
+    TAVILY_API_KEY: Optional[str] = Field(
+        default=None,
+        description="Tavily search API key for web search",
+    )
+
     DEFAULT_CITY: str = Field(default="Beijing")
     MORNING_GREETING_TIME: str = Field(default="08:00")
     NOON_REMINDER_TIME: str = Field(default="12:00")
