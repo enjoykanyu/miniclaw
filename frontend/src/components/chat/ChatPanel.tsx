@@ -7,7 +7,7 @@ import { ChatMessage } from "@/components/chat/ChatMessage";
 import { useAppStore } from "@/lib/store";
 
 export function ChatPanel() {
-  const { messages, sendMessage, isStreaming, forceThink, forceSearch, toggleForceThink, toggleForceSearch } = useAppStore();
+  const { messages, sendMessage, isStreaming, forceThink, forceSearch, toggleForceThink, toggleForceSearch, selectedKbs, kbRetrievalMode, toggleKbSelection, setKbRetrievalMode } = useAppStore();
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -72,6 +72,10 @@ export function ChatPanel() {
         forceSearch={forceSearch}
         onToggleThink={toggleForceThink}
         onToggleSearch={toggleForceSearch}
+        selectedKbs={selectedKbs}
+        kbRetrievalMode={kbRetrievalMode}
+        onToggleKb={toggleKbSelection}
+        onSetKbRetrievalMode={setKbRetrievalMode}
       />
     </div>
   );

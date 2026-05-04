@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Plus, Settings, Bot, ChevronRight } from "lucide-react";
+import { Plus, Settings, Bot, ChevronRight, Database } from "lucide-react";
 
 import { useAppStore } from "@/lib/store";
 import { InspectorPanel } from "@/components/editor/InspectorPanel";
+import { KnowledgeBasePanel } from "@/components/knowledge/KnowledgeBasePanel";
 
 export function Navbar() {
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const [isKbOpen, setIsKbOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -106,6 +108,28 @@ export function Navbar() {
           <button
             style={{
               display: "flex",
+              alignItems: "center",
+              gap: 6,
+              borderRadius: 8,
+              border: "1px solid #e5e5e5",
+              padding: "6px 12px",
+              fontSize: 13,
+              color: "#666666",
+              backgroundColor: "#ffffff",
+              cursor: "pointer",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f0f0f0")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ffffff")}
+            onClick={() => setIsKbOpen(true)}
+            title="知识库管理"
+            type="button"
+          >
+            <Database size={14} />
+            知识库
+          </button>
+          <button
+            style={{
+              display: "flex",
               height: 32,
               width: 32,
               alignItems: "center",
@@ -159,6 +183,43 @@ export function Navbar() {
             }}
           >
             <InspectorPanel onClose={() => setIsInspectorOpen(false)} />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {isKbOpen && mounted && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.3)",
+              backdropFilter: "blur(4px)",
+            }}
+            onClick={() => setIsKbOpen(false)}
+          />
+          <div
+            style={{
+              position: "relative",
+              zIndex: 10,
+              display: "flex",
+              height: "80vh",
+              width: "90vw",
+              maxWidth: 1000,
+              flexDirection: "column",
+            }}
+          >
+            <KnowledgeBasePanel onClose={() => setIsKbOpen(false)} />
           </div>
         </div>,
         document.body

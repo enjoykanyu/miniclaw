@@ -38,6 +38,8 @@ type AppStore = {
   ragMode: boolean;
   forceThink: boolean;
   forceSearch: boolean;
+  selectedKbs: string[];
+  kbRetrievalMode: "intent" | "force";
   skills: Array<{ name: string; description: string; path: string }>;
   editableFiles: string[];
   inspectorPath: string;
@@ -51,6 +53,8 @@ type AppStore = {
   toggleRagMode: () => Promise<void>;
   toggleForceThink: () => void;
   toggleForceSearch: () => void;
+  toggleKbSelection: (kbName: string) => void;
+  setKbRetrievalMode: (mode: "intent" | "force") => void;
   renameCurrentSession: (title: string) => Promise<void>;
   removeSession: (sessionId: string) => Promise<void>;
   loadInspectorFile: (path: string) => Promise<void>;
@@ -94,6 +98,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ragMode, setRagModeState] = useState(false);
   const [forceThink, setForceThink] = useState(false);
   const [forceSearch, setForceSearch] = useState(false);
+  const [selectedKbs, setSelectedKbs] = useState<string[]>([]);
+  const [kbRetrievalMode, setKbRetrievalModeState] = useState<"intent" | "force">("intent");
   const [skills, setSkills] = useState<Array<{ name: string; description: string; path: string }>>([]);
   const [inspectorPath, setInspectorPath] = useState(
     "config/prompts/router.yaml"
@@ -184,7 +190,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       await streamChat(
-        { message: value.trim(), session_id: sessionId, force_think: forceThink, force_search: forceSearch },
+        { message: value.trim(), session_id: sessionId, force_think: forceThink, force_search: forceSearch, selected_kbs: selectedKbs, kb_retrieval_mode: kbRetrievalMode },
         {
           onEvent(event, data) {
             console.log("[SSE event]", event, data);
@@ -369,6 +375,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setForceSearch((prev) => !prev);
   }
 
+  function toggleKbSelection(kbName: string) {
+    setSelectedKbs((prev) =>
+      prev.includes(kbName) ? prev.filter((n) => n !== kbName) : [...prev, kbName]
+    );
+  }
+
+  function setKbRetrievalMode(mode: "intent" | "force") {
+    setKbRetrievalModeState(mode);
+  }
+
   async function renameCurrentSession(title: string) {
     if (!currentSessionId || !title.trim()) {
       return;
@@ -451,6 +467,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ragMode,
     forceThink,
     forceSearch,
+    selectedKbs,
+    kbRetrievalMode,
     skills,
     editableFiles,
     inspectorPath,
@@ -464,6 +482,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toggleRagMode,
     toggleForceThink,
     toggleForceSearch,
+    toggleKbSelection,
+    setKbRetrievalMode,
     renameCurrentSession,
     removeSession,
     loadInspectorFile,

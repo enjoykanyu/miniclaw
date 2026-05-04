@@ -130,6 +130,14 @@ export type KnowledgeBase = {
   index_size: number;
   has_index: boolean;
   updated_at: string;
+  embedding_model?: string;
+  rerank_model?: string;
+  embedding_dimension?: number;
+  retrieve_top_k?: number;
+  doc_processor?: string;
+  chunk_size?: number;
+  chunk_overlap?: number;
+  similarity_threshold?: number;
 };
 
 export type KbDocument = {
@@ -186,12 +194,35 @@ export async function clearKbDocuments(kbName: string) {
   });
 }
 
+export async function uploadFilesToKb(kbName: string, files: File[]) {
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("files", file);
+  }
+  const response = await fetch(`${getApiBase()}/knowledge-bases/${encodeURIComponent(kbName)}/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Upload failed: ${response.status}`);
+  }
+  return (await response.json()) as {
+    knowledge_base: string;
+    uploaded_files: string[];
+    added_chunks: number;
+    message: string;
+  };
+}
+
 export async function streamChat(
   payload: {
     message: string;
     session_id: string;
     force_think?: boolean;
     force_search?: boolean;
+    selected_kbs?: string[];
+    kb_retrieval_mode?: "intent" | "force";
   },
   handlers: StreamHandlers
 ) {
