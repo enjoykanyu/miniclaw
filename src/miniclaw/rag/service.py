@@ -24,6 +24,7 @@ class KnowledgeBase:
         description: str = "",
         persist_dir: str = None,
         use_milvus: bool = False,
+        config: Optional[Dict[str, Any]] = None,
     ):
         self.name = name
         self.description = description
@@ -31,8 +32,12 @@ class KnowledgeBase:
         self.persist_dir = persist_dir or os.path.join(
             settings.DATA_DIR, "knowledge_bases", name
         )
+        self.config = config or {}
         self._vectorstore = None
-        self._loader = DocumentLoader(chunk_size=512, chunk_overlap=50)
+        self._loader = DocumentLoader(
+            chunk_size=self.config.get("chunk_size", 512),
+            chunk_overlap=self.config.get("chunk_overlap", 50)
+        )
 
     @property
     def vectorstore(self):
@@ -148,6 +153,8 @@ class KnowledgeBase:
                 "updated_at": datetime.now().isoformat(),
             }
         )
+        if self.config:
+            existing["config"] = self.config
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(existing, f, ensure_ascii=False, indent=2)
 
@@ -182,14 +189,16 @@ class RAGService:
         )
         self._knowledge_bases: Dict[str, KnowledgeBase] = {}
 
-    def create_kb(self, name: str, description: str = "", use_milvus: bool = False) -> KnowledgeBase:
+    def create_kb(self, name: str, description: str = "", config: Optional[Dict[str, Any]] = None, use_milvus: bool = False) -> KnowledgeBase:
         if name not in self._knowledge_bases:
             self._knowledge_bases[name] = KnowledgeBase(
                 name=name,
                 description=description,
                 persist_dir=os.path.join(self.kb_base_dir, name),
                 use_milvus=use_milvus,
+                config=config,
             )
+            self._knowledge_bases[name]._save_kb_meta(0)
         return self._knowledge_bases[name]
 
     def get_kb(self, name: str) -> Optional[KnowledgeBase]:
@@ -198,7 +207,16 @@ class RAGService:
 
         kb_dir = os.path.join(self.kb_base_dir, name)
         if os.path.exists(kb_dir):
-            kb = KnowledgeBase(name=name, persist_dir=kb_dir)
+            meta_path = os.path.join(kb_dir, "kb_meta.json")
+            config = None
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                        config = meta.get("config")
+                except Exception:
+                    pass
+            kb = KnowledgeBase(name=name, persist_dir=kb_dir, config=config)
             self._knowledge_bases[name] = kb
             return kb
         return None

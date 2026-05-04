@@ -125,6 +125,14 @@ class ConfigRagModeRequest(BaseModel):
 class KbCreateRequest(BaseModel):
     name: str = Field(..., description="Knowledge base name")
     description: str = Field(default="", description="Knowledge base description")
+    embedding_model: Optional[str] = Field(default="bge-large-zh", description="Embedding model name")
+    embedding_dimension: Optional[int] = Field(default=1024, description="Embedding vector dimension")
+    rerank_model: Optional[str] = Field(default="none", description="Rerank model name")
+    retrieve_top_k: Optional[int] = Field(default=5, description="Number of documents to retrieve")
+    doc_processor: Optional[str] = Field(default="mineru", description="Document processor type")
+    chunk_size: Optional[int] = Field(default=512, description="Document chunk size")
+    chunk_overlap: Optional[int] = Field(default=50, description="Chunk overlap size")
+    similarity_threshold: Optional[float] = Field(default=0.7, description="Similarity threshold for filtering")
 
 
 class KbRenameRequest(BaseModel):
@@ -792,11 +800,22 @@ async def create_knowledge_base(request: KbCreateRequest):
         rag_service = get_rag_service()
         if request.name in rag_service.list_kbs():
             raise HTTPException(status_code=409, detail=f"Knowledge base '{request.name}' already exists")
-        kb = rag_service.create_kb(request.name, request.description)
+        kb_config = {
+            "embedding_model": request.embedding_model,
+            "embedding_dimension": request.embedding_dimension,
+            "rerank_model": request.rerank_model,
+            "retrieve_top_k": request.retrieve_top_k,
+            "doc_processor": request.doc_processor,
+            "chunk_size": request.chunk_size,
+            "chunk_overlap": request.chunk_overlap,
+            "similarity_threshold": request.similarity_threshold,
+        }
+        kb = rag_service.create_kb(request.name, request.description, kb_config)
         return {
             "name": request.name,
             "description": request.description,
             "document_count": 0,
+            "config": kb_config,
             "message": f"Knowledge base '{request.name}' created successfully",
         }
     except HTTPException:

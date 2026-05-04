@@ -15,6 +15,7 @@ import {
   createKnowledgeBase,
   deleteKnowledgeBase,
   type KnowledgeBase,
+  type KbCreateConfig,
 } from "@/lib/api";
 import { KbCreateModal, type KbConfig } from "./KbCreateModal";
 import { KbDetailPanel } from "./KbDetailPanel";
@@ -46,7 +47,19 @@ export function KnowledgeBasePanel({ onClose }: { onClose?: () => void }) {
 
   const handleCreate = async (config: KbConfig) => {
     try {
-      await createKnowledgeBase(config.name, config.description);
+      const payload: KbCreateConfig = {
+        name: config.name,
+        description: config.description,
+        embedding_model: config.embeddingModel,
+        embedding_dimension: config.embeddingDimension,
+        rerank_model: config.rerankModel,
+        retrieve_top_k: config.retrieveTopK,
+        doc_processor: config.docProcessor,
+        chunk_size: config.chunkSize,
+        chunk_overlap: config.chunkOverlap,
+        similarity_threshold: config.similarityThreshold,
+      };
+      await createKnowledgeBase(payload);
       setShowCreate(false);
       await loadKbs();
       // Auto select the newly created KB

@@ -150,10 +150,23 @@ export async function listKnowledgeBases() {
   return request<{ knowledge_bases: KnowledgeBase[]; count: number }>("/knowledge-bases");
 }
 
-export async function createKnowledgeBase(name: string, description = "") {
-  return request<{ name: string; description: string; document_count: number; message: string }>("/knowledge-bases", {
+export type KbCreateConfig = {
+  name: string;
+  description?: string;
+  embedding_model?: string;
+  embedding_dimension?: number;
+  rerank_model?: string;
+  retrieve_top_k?: number;
+  doc_processor?: string;
+  chunk_size?: number;
+  chunk_overlap?: number;
+  similarity_threshold?: number;
+};
+
+export async function createKnowledgeBase(config: KbCreateConfig) {
+  return request<{ name: string; description: string; document_count: number; config: Record<string, unknown>; message: string }>("/knowledge-bases", {
     method: "POST",
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify(config),
   });
 }
 
