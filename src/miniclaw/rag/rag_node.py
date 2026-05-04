@@ -99,6 +99,21 @@ async def rag_detect_node(state: MiniClawState) -> Dict[str, Any]:
     if not last_human_msg:
         return {"needs_rag": False}
 
+    metadata = state.get("metadata") or {}
+    selected_kbs = metadata.get("selected_kbs")
+    kb_retrieval_mode = metadata.get("kb_retrieval_mode", "intent")
+
+    # 如果用户手动选择了知识库且设置为强制检索模式，直接返回True
+    if selected_kbs and kb_retrieval_mode == "force":
+        logger.info(f"Force retrieval mode with selected KBs: {selected_kbs}")
+        return {"needs_rag": True}
+
+    # 如果用户手动选择了知识库但使用意图识别模式，仍然做检测
+    if selected_kbs and kb_retrieval_mode == "intent":
+        needs_rag = detect_rag_need(last_human_msg, strategy="hybrid")
+        return {"needs_rag": needs_rag}
+
+    # 默认行为：自动检测
     needs_rag = detect_rag_need(last_human_msg, strategy="hybrid")
     return {"needs_rag": needs_rag}
 
@@ -129,8 +144,21 @@ async def rag_retrieve_node(state: MiniClawState) -> Dict[str, Any]:
     if not kb_names:
         return {"rag_context": "", "rag_sources": []}
 
+    # 获取用户选择的知识库
+    metadata = state.get("metadata") or {}
+    selected_kbs = metadata.get("selected_kbs")
+
+    # 如果用户选择了特定知识库，只检索这些；否则检索所有
+    if selected_kbs and len(selected_kbs) > 0:
+        target_kbs = [name for name in selected_kbs if name in kb_names]
+        if not target_kbs:
+            logger.warning(f"Selected KBs not found: {selected_kbs}, falling back to all KBs")
+            target_kbs = kb_names
+    else:
+        target_kbs = kb_names
+
     all_results: List[RetrievalResult] = []
-    for kb_name in kb_names:
+    for kb_name in target_kbs:
         try:
             kb = rag_service.get_kb(kb_name)
             if kb is None:
@@ -201,6 +229,14 @@ def should_retrieve(state: MiniClawState) -> str:
     if metadata.get("force_search"):
         logger.info("force_search=True, skipping RAG, routing to supervisor")
         return "skip_rag"
+
+    # 如果用户手动选择了知识库且设置为强制检索模式，强制进入RAG
+    selected_kbs = metadata.get("selected_kbs")
+    kb_retrieval_mode = metadata.get("kb_retrieval_mode", "intent")
+    if selected_kbs and kb_retrieval_mode == "force":
+        logger.info(f"KB force retrieval mode with selected KBs: {selected_kbs}")
+        return "rag_retrieve"
+
     if state.get("needs_rag"):
         return "rag_retrieve"
     return "skip_rag"
