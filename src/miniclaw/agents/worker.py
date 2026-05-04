@@ -142,6 +142,38 @@ class BaseWorker(ABC):
         new_state.update(updates)
         return new_state
 
+    def _get_tools_from_skills(self, state: MiniClawState) -> List[BaseTool]:
+        """
+        从 Skill 注册表获取当前 Agent 需要的工具
+        并根据 Skill 中定义的条件决定是否注入
+        
+        Cherry Studio 设计模式：
+        - Skill 声明式定义工具（名称 + 条件）
+        - 运行时根据 state.metadata 中的条件动态加载工具实例
+        """
+        from miniclaw.skills.registry import skill_registry
+        
+        skills = skill_registry.get_for_agent(self.name)
+        tools = []
+        
+        metadata = state.get("metadata") or {}
+        
+        for skill in skills:
+            for tool_def in skill.tools:
+                # 检查条件：condition 为 None 表示无条件注入
+                condition = tool_def.condition
+                if condition == "force_search" and not metadata.get("force_search"):
+                    continue  # 不满足条件，跳过注入
+                if condition == "force_think" and not metadata.get("force_think"):
+                    continue
+                
+                # 加载工具实例
+                tool = self._load_tool_by_name(tool_def.name)
+                if tool:
+                    tools.append(tool)
+        
+        return tools
+
     def _get_force_tools(self, state: MiniClawState) -> List[BaseTool]:
         """
         根据 State 中的 metadata 获取需要强制注入的工具
@@ -150,20 +182,21 @@ class BaseWorker(ABC):
         1. 从 state.metadata 中读取 force_think 和 force_search
         2. 根据标记动态导入并返回对应的工具
         """
-        force_tools: List[BaseTool] = []
+        """
+        强制工具 = Skill 条件工具 + 用户显式强制标记
+        """
+        # 1. 从 Skill 获取条件触发的工具
+        skill_tools = self._get_tools_from_skills(state)
+        
+        # 2. 用户显式强制（保留作为兜底）
         metadata = state.get("metadata") or {}
-
-        if metadata.get("force_think"):
-            from miniclaw.tools.think import think
-            if think not in force_tools:
-                force_tools.append(think)
-
-        # 只有预处理搜索失败或没有搜索结果时，才注入 TAVILY 让 LLM 自己调用
-        if metadata.get("force_search") and not state.get("force_search_context"):
+        force_tools = list(skill_tools)
+        
+        # 如果 force_search=true 但 Skill 没有覆盖，兜底注入
+        if metadata.get("force_search") and not any(t.name == "tavily" for t in force_tools):
             from miniclaw.tools.tavily import tavily
-            if tavily not in force_tools:
-                force_tools.append(tavily)
-
+            force_tools.append(tavily)
+        
         return force_tools
 
     def _build_force_prompt(self, state: MiniClawState) -> str:
@@ -174,32 +207,27 @@ class BaseWorker(ABC):
         2. 如果搜索未执行但 force_search=True → 强制要求调用 TAVILY 工具
         3. 如果 force_think=True → 强制要求调用 think 工具
         """
+        """
+        强制提示词 = Skill 内容 + 动态条件
+        """
+        from miniclaw.skills.registry import skill_registry
+        
         prompts = []
         metadata = state.get("metadata") or {}
-
-        if metadata.get("force_think"):
-            prompts.append(
-                "\n\n【强制要求】用户已启用深度思考模式。"
-                "在回答任何问题前，你必须先调用 `think` 工具进行结构化思考，"
-                "分析问题的各个方面，然后再给出最终回答。"
-            )
-
-        search_context = state.get("force_search_context")
-        if search_context:
-            prompts.append(
-                "【联网搜索结果】\n"
-                f"{search_context}\n\n"
-                "请基于以上联网搜索结果回答用户问题。不要调用搜索工具。"
-            )
-        elif metadata.get("force_search"):
-            prompts.append(
-                "\n\n【强制要求 - 联网搜索】\n"
-                "用户已启用联网搜索模式。"
-                "在回答前，你必须先调用 `tavily` 工具搜索最新的网络信息，"
-                "然后再基于搜索结果给出准确、及时的回复。\n"
-                "注意：优先使用 tavily 工具联网搜索，而不是 rag_search 知识库搜索。"
-            )
-
+        
+        # 从 Skill 获取能力描述
+        skill_prompt = skill_registry.build_prompt_for_agent(self.name)
+        
+        # 如果 force_search=true，在 Skill 描述基础上追加强制要求
+        if metadata.get("force_search"):
+            # 找到 web_search skill 的内容
+            web_search_skill = skill_registry.get("web_search")
+            if web_search_skill:
+                prompts.append(f"【强制模式 - {web_search_skill.name}】\n{web_search_skill.content}")
+            else:
+                # fallback
+                prompts.append("【强制要求】用户已启用联网搜索...")
+        
         return "\n".join(prompts)
 
     async def execute(self, state: MiniClawState) -> Dict[str, Any]:

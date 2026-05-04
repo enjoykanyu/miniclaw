@@ -3,8 +3,9 @@ name: web_search
 description: 当用户需要搜索实时信息时使用
 agent: info        # 绑定到哪个 Agent
 tools:             # 需要哪些工具
-  - tavily
-  - get_news
+  - name: tavily
+    condition: force_search  # 仅在 force_search=true 时注入
+    required: true           # 强制要求调用（不是可选的）
 ---
 
 # 网页搜索
