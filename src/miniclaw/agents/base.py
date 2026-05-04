@@ -13,6 +13,7 @@ from langgraph.prebuilt import create_react_agent
 
 from miniclaw.core.state import MiniClawState
 from miniclaw.utils.llm import get_llm, get_smart_llm
+from miniclaw.skills.registry import skill_registry
 
 
 class BaseAgent(ABC):
