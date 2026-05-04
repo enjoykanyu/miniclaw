@@ -68,9 +68,21 @@ class BaseAgent(ABC):
             state_modifier=system_prompt,
         )
 
+    
     def _get_system_prompt(self) -> str:
-        """获取系统提示词 - 子类可覆盖"""
-        return f"你是 {self.name}，{self.description}"
+        """
+        获取系统提示词 - 自动追加匹配的 skills
+        """
+        base_prompt = f"你是 {self.name}，{self.description}"
+        
+        # 从注册表获取当前 Agent 的 skills
+        skill_prompt = skill_registry.build_prompt_for_agent(self.name)
+        
+        if skill_prompt:
+            return f"{base_prompt}\n\n# 你的能力\n\n{skill_prompt}"
+        
+        return base_prompt
+
 
     @property
     def llm(self) -> BaseChatModel:
