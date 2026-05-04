@@ -29,7 +29,7 @@ from miniclaw.tools.news import fetch_news
 from miniclaw.mcp.tools import mcp_tool_registry
 from miniclaw.mcp.manager import init_mcp, close_mcp
 from miniclaw.config.settings import settings
-
+from miniclaw.skills import skill_registry, SkillLoader
 
 app_state = {"miniclaw_app": None}
 
