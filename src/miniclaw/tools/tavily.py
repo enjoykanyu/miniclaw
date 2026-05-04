@@ -1,5 +1,5 @@
 """
-Trail Tool - 联网搜索工具
+TAVILY Tool - 联网搜索工具
 
 当用户强制启用联网搜索时，此工具被注入到 Agent 的工具列表中。
 模型会在回答前，先调用此工具获取最新的网络信息。
@@ -16,7 +16,7 @@ from miniclaw.config.settings import settings
 
 
 @tool
-def trail(query: str, max_results: int = 5) -> str:
+def tavily(query: str, max_results: int = 5) -> str:
     """
     联网搜索工具。当用户需要获取最新信息、实时数据或网络内容时使用此工具。
 

@@ -29,7 +29,7 @@ class BaseWorker(ABC):
     2. 可以访问共享的 State
     3. 返回 Command 以便 Supervisor 继续决策
     4. 支持工具调用和 ReAct 模式
-    5. 支持强制注入 think 和 trail 工具
+    5. 支持强制注入 think 和 TAVILY 工具
     """
 
     name: str = "worker_agent"
@@ -158,11 +158,11 @@ class BaseWorker(ABC):
             if think not in force_tools:
                 force_tools.append(think)
 
-        # 只有预处理搜索失败或没有搜索结果时，才注入 trail 让 LLM 自己调用
+        # 只有预处理搜索失败或没有搜索结果时，才注入 TAVILY 让 LLM 自己调用
         if metadata.get("force_search") and not state.get("force_search_context"):
-            from miniclaw.tools.trail import trail
-            if trail not in force_tools:
-                force_tools.append(trail)
+            from miniclaw.tools.tavily import tavily
+            if tavily not in force_tools:
+                force_tools.append(tavily)
 
         return force_tools
 
@@ -171,7 +171,7 @@ class BaseWorker(ABC):
         构建强制工具使用的提示词追加
 
         1. 如果搜索已在预处理阶段程序化执行 → 直接注入结果，禁止再调用搜索工具
-        2. 如果搜索未执行但 force_search=True → 强制要求调用 trail 工具
+        2. 如果搜索未执行但 force_search=True → 强制要求调用 TAVILY 工具
         3. 如果 force_think=True → 强制要求调用 think 工具
         """
         prompts = []
@@ -195,9 +195,9 @@ class BaseWorker(ABC):
             prompts.append(
                 "\n\n【强制要求 - 联网搜索】\n"
                 "用户已启用联网搜索模式。"
-                "在回答前，你必须先调用 `trail` 工具搜索最新的网络信息，"
+                "在回答前，你必须先调用 `tavily` 工具搜索最新的网络信息，"
                 "然后再基于搜索结果给出准确、及时的回复。\n"
-                "注意：优先使用 trail 工具联网搜索，而不是 rag_search 知识库搜索。"
+                "注意：优先使用 tavily 工具联网搜索，而不是 rag_search 知识库搜索。"
             )
 
         return "\n".join(prompts)
@@ -290,7 +290,7 @@ class BaseWorker(ABC):
             required_tools.append("think")
 
         if metadata.get("force_search") and not state.get("force_search_context"):
-            required_tools.append("trail")
+            required_tools.append("tavily")
 
         return required_tools
 

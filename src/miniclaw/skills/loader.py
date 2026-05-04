@@ -45,7 +45,7 @@ class SkillLoader:
         description: ...
         agent: info
         tools:
-          - trail
+          - tavily
         ---
         
         # 网页搜索
