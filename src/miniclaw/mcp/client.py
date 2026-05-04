@@ -6,6 +6,7 @@ MCP Client Implementation
 import asyncio
 import json
 import logging
+import os
 from typing import Dict, Any, Optional, List, Callable, AsyncGenerator
 from dataclasses import dataclass, field
 from enum import Enum
@@ -127,7 +128,7 @@ class MCPClient:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env={**dict(asyncio.subprocess.os.environ), **self.config.env},
+                env={**dict(os.environ), **self.config.env},
             )
             
             # 启动消息读取循环
