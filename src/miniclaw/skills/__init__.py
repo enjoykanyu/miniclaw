@@ -12,12 +12,14 @@ import yaml
 from datetime import datetime
 import random
 
-from miniclaw.skills import skill, SkillRegistry, skill_registry
+from miniclaw.skills.registry import SkillRegistry, skill_registry
+from miniclaw.skills.loader import SkillLoader
 
 __all__ = [
     "skill",
     "SkillRegistry",
     "skill_registry",
+    "SkillLoader",
     "WeatherSkill",
     "NewsSkill",
     "ReminderSkill",
@@ -30,6 +32,17 @@ __all__ = [
     "get_enabled_skills",
     "is_skill_enabled",
 ]
+
+
+# Skill 装饰器 - 将类注册到 skill_registry
+def skill(name: str, description: str = ""):
+    """装饰器：将 Skill 类注册到全局注册表"""
+    def decorator(cls):
+        # 这里可以扩展为自动实例化或元数据记录
+        cls._skill_name = name
+        cls._skill_description = description
+        return cls
+    return decorator
 
 
 class SkillConfig:
