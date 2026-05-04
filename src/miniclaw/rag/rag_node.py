@@ -31,10 +31,7 @@ logger = logging.getLogger(__name__)
 RAG_KEYWORDS = [
     "知识库", "文档", "资料", "文件", "PDF", "pdf",
     "文章", "论文", "报告", "手册", "指南", "教程",
-    "查找", "搜索", "检索", "查询", "找一下",
-    "帮我查", "有没有", "关于", "相关",
-    "what is", "how to", "explain", "find", "search",
-    "document", "knowledge", "reference",
+    "help", "document", "knowledge",
 ]
 
 RAG_SYSTEM_PROMPT = """你是一个知识库问答助手。请基于以下检索到的参考资料回答用户的问题。
@@ -200,6 +197,10 @@ async def rag_generate_node(state: MiniClawState) -> Dict[str, Any]:
 
 def should_retrieve(state: MiniClawState) -> str:
     """条件边：判断是否需要进入 RAG 检索"""
+    metadata = state.get("metadata") or {}
+    if metadata.get("force_search"):
+        logger.info("force_search=True, skipping RAG, routing to supervisor")
+        return "skip_rag"
     if state.get("needs_rag"):
         return "rag_retrieve"
     return "skip_rag"
