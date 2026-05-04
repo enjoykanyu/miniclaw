@@ -37,7 +37,8 @@ app_state = {"miniclaw_app": None}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_data_dirs()
-
+    # 加载所有 skills
+    skill_registry.load_all(SkillLoader())
     # 初始化 MCP 连接和工具注册表
     try:
         await init_mcp()
