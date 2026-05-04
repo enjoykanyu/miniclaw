@@ -35,6 +35,7 @@ export type SessionHistory = {
     role: "user" | "assistant";
     content: string;
     tool_calls?: ToolCall[];
+    timestamp?: string;
   }>;
 };
 
@@ -119,6 +120,69 @@ export async function setRagMode(enabled: boolean) {
   return request<{ enabled: boolean }>("/config/rag-mode", {
     method: "PUT",
     body: JSON.stringify({ enabled })
+  });
+}
+
+export type KnowledgeBase = {
+  name: string;
+  description: string;
+  document_count: number;
+  index_size: number;
+  has_index: boolean;
+  updated_at: string;
+};
+
+export type KbDocument = {
+  source: string;
+  type: string;
+  chunk_count: number;
+};
+
+export async function listKnowledgeBases() {
+  return request<{ knowledge_bases: KnowledgeBase[]; count: number }>("/knowledge-bases");
+}
+
+export async function createKnowledgeBase(name: string, description = "") {
+  return request<{ name: string; description: string; document_count: number; message: string }>("/knowledge-bases", {
+    method: "POST",
+    body: JSON.stringify({ name, description }),
+  });
+}
+
+export async function getKnowledgeBase(kbName: string) {
+  return request<KnowledgeBase & { persist_dir: string }>(`/knowledge-bases/${encodeURIComponent(kbName)}`);
+}
+
+export async function updateKnowledgeBase(kbName: string, newName: string, description = "") {
+  return request<{ name: string; description: string; message: string }>(`/knowledge-bases/${encodeURIComponent(kbName)}`, {
+    method: "PUT",
+    body: JSON.stringify({ name: newName, description }),
+  });
+}
+
+export async function deleteKnowledgeBase(kbName: string) {
+  return request<{ message: string }>(`/knowledge-bases/${encodeURIComponent(kbName)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function listKbDocuments(kbName: string) {
+  return request<{ knowledge_base: string; documents: KbDocument[]; total_chunks: number }>(
+    `/knowledge-bases/${encodeURIComponent(kbName)}/documents`
+  );
+}
+
+export async function addDocumentsToKb(kbName: string, filePaths: string[]) {
+  const query = filePaths.map((p) => `file_paths=${encodeURIComponent(p)}`).join("&");
+  return request<{ knowledge_base: string; added_count: number; message: string }>(
+    `/knowledge-bases/${encodeURIComponent(kbName)}/documents?${query}`,
+    { method: "POST" }
+  );
+}
+
+export async function clearKbDocuments(kbName: string) {
+  return request<{ message: string }>(`/knowledge-bases/${encodeURIComponent(kbName)}/documents`, {
+    method: "DELETE",
   });
 }
 

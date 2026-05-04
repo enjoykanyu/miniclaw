@@ -27,6 +27,7 @@ type Message = {
   toolCalls: ToolCall[];
   retrievals: RetrievalResult[];
   thinkingSteps: ThinkingStep[];
+  timestamp: number;
 };
 
 type AppStore = {
@@ -80,7 +81,8 @@ function toUiMessages(history: Awaited<ReturnType<typeof getSessionHistory>>["me
     content: message.content ?? "",
     toolCalls: message.tool_calls ?? [],
     retrievals: [],
-    thinkingSteps: []
+    thinkingSteps: [],
+    timestamp: message.timestamp ? new Date(message.timestamp).getTime() : Date.now()
   }));
 }
 
@@ -156,7 +158,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       content: value.trim(),
       toolCalls: [],
       retrievals: [],
-      thinkingSteps: []
+      thinkingSteps: [],
+      timestamp: Date.now()
     };
     const assistantMessage: Message = {
       id: makeId(),
@@ -164,7 +167,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       content: "",
       toolCalls: [],
       retrievals: [],
-      thinkingSteps: []
+      thinkingSteps: [],
+      timestamp: Date.now()
     };
 
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
@@ -281,7 +285,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 content: "",
                 toolCalls: [],
                 retrievals: [],
-                thinkingSteps: []
+                thinkingSteps: [],
+                timestamp: Date.now()
               };
               activeAssistantId = nextAssistant.id;
               setMessages((prev) => [...prev, nextAssistant]);
