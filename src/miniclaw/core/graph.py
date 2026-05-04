@@ -176,7 +176,6 @@ def build_supervisor_graph(checkpointer: Optional[MemorySaver] = None, enable_ra
     if enable_rag:
         graph.add_node("rag_detect", rag_detect_node)
         graph.add_node("rag_retrieve", rag_retrieve_node)
-        graph.add_node("rag_generate", rag_generate_node)
 
         graph.set_entry_point("rag_detect")
 
@@ -188,8 +187,8 @@ def build_supervisor_graph(checkpointer: Optional[MemorySaver] = None, enable_ra
                 "skip_rag": "supervisor",
             }
         )
-        graph.add_edge("rag_retrieve", "rag_generate")
-        graph.add_edge("rag_generate", END)
+        # RAG 检索后将检索结果注入 state，然后继续走 Supervisor -> Worker 流程
+        graph.add_edge("rag_retrieve", "supervisor")
     else:
         graph.set_entry_point("supervisor")
 

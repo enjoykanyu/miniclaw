@@ -207,6 +207,17 @@ class BaseWorker(ABC):
             "messages": result["messages"],
         }
 
+    def _build_rag_prompt(self, state: MiniClawState) -> str:
+        """构建 RAG 上下文提示词"""
+        rag_context = state.get("rag_context", "")
+        if not rag_context:
+            return ""
+        return (
+            "\n\n【知识库检索结果】\n"
+            f"{rag_context}\n"
+            "\n你可以参考以上知识库内容回答用户问题。"
+        )
+
     async def _execute_single_call(self, state: MiniClawState) -> Dict[str, Any]:
         """
         单次调用模式执行（支持强制工具注入）
@@ -218,6 +229,11 @@ class BaseWorker(ABC):
         force_prompt = self._build_force_prompt(state)
         if force_prompt:
             system_prompt += force_prompt
+
+        # 追加 RAG 上下文
+        rag_prompt = self._build_rag_prompt(state)
+        if rag_prompt:
+            system_prompt += rag_prompt
 
         # 构建消息
         messages = [
