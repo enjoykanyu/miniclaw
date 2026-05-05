@@ -88,7 +88,11 @@ class KnowledgeBase:
         return self.vectorstore.add_texts(texts, metadatas)
 
     def search(self, query: str, k: int = 5) -> List[RetrievalResult]:
+        logger.info(f"[KB:{self.name}] search: query='{query[:50]}...', k={k}")
         results_with_scores = self.vectorstore.similarity_search_with_score(query, k)
+        logger.info(f"[KB:{self.name}] search results: count={len(results_with_scores)}")
+        for i, (doc, score) in enumerate(results_with_scores):
+            logger.info(f"[KB:{self.name}]   result[{i}]: score={score:.4f}, source={doc.metadata.get('source', 'unknown')[:30]}, content={doc.content[:50]}...")
         return [
             RetrievalResult(
                 content=doc.content,
@@ -114,8 +118,10 @@ class KnowledgeBase:
         ]
 
     def get_context(self, query: str, k: int = 5, max_length: int = 3000) -> str:
+        logger.info(f"[KB:{self.name}] get_context: query='{query[:50]}...', k={k}, max_length={max_length}")
         results = self.search(query, k)
         if not results:
+            logger.warning(f"[KB:{self.name}] No results found for query")
             return ""
 
         parts = []
@@ -123,11 +129,14 @@ class KnowledgeBase:
         for i, r in enumerate(results):
             entry = f"[来源{i+1}: {r.source} (相关度:{r.score:.2f})]\n{r.content}\n"
             if current_len + len(entry) > max_length:
+                logger.info(f"[KB:{self.name}] Truncated context at {i} results (max_length reached)")
                 break
             parts.append(entry)
             current_len += len(entry)
 
-        return "\n".join(parts)
+        context = "\n".join(parts)
+        logger.info(f"[KB:{self.name}] Context built: {len(parts)} results, {len(context)} chars")
+        return context
 
     def _save_kb_meta(self, added_count: int, is_incremental: bool = False):
         os.makedirs(self.persist_dir, exist_ok=True)

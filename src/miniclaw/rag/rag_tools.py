@@ -14,10 +14,14 @@ def rag_search(query: str, kb_name: str = "default") -> str:
         query: 搜索查询，描述你想查找的信息
         kb_name: 知识库名称，默认为 'default'
     """
+    from loguru import logger
+    logger.info(f"[rag_search tool] Called with query='{query[:50]}...', kb_name='{kb_name}'")
     rag = get_rag_service()
     context = rag.get_context(query, kb_name, k=5, max_length=3000)
     if not context:
+        logger.warning(f"[rag_search tool] No context found in KB '{kb_name}'")
         return f"知识库 '{kb_name}' 中未找到与 '{query}' 相关的内容。"
+    logger.info(f"[rag_search tool] Returning context: {len(context)} chars")
     return context
 
 

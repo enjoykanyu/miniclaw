@@ -88,6 +88,7 @@ async def rag_detect_node(state: MiniClawState) -> Dict[str, Any]:
     """
     messages = state.get("messages", [])
     if not messages:
+        logger.info("[RAG Detect] No messages, skipping RAG")
         return {"needs_rag": False}
 
     last_human_msg = None
@@ -97,24 +98,29 @@ async def rag_detect_node(state: MiniClawState) -> Dict[str, Any]:
             break
 
     if not last_human_msg:
+        logger.info("[RAG Detect] No human message found")
         return {"needs_rag": False}
 
     metadata = state.get("metadata") or {}
     selected_kbs = metadata.get("selected_kbs")
     kb_retrieval_mode = metadata.get("kb_retrieval_mode", "intent")
 
+    logger.info(f"[RAG Detect] query='{last_human_msg[:50]}...', selected_kbs={selected_kbs}, mode={kb_retrieval_mode}")
+
     # 如果用户手动选择了知识库且设置为强制检索模式，直接返回True
     if selected_kbs and kb_retrieval_mode == "force":
-        logger.info(f"Force retrieval mode with selected KBs: {selected_kbs}")
+        logger.info(f"[RAG Detect] Force retrieval mode with selected KBs: {selected_kbs}")
         return {"needs_rag": True}
 
     # 如果用户手动选择了知识库但使用意图识别模式，仍然做检测
     if selected_kbs and kb_retrieval_mode == "intent":
         needs_rag = detect_rag_need(last_human_msg, strategy="hybrid")
+        logger.info(f"[RAG Detect] Intent detection with selected_kbs: needs_rag={needs_rag}")
         return {"needs_rag": needs_rag}
 
     # 默认行为：自动检测
     needs_rag = detect_rag_need(last_human_msg, strategy="hybrid")
+    logger.info(f"[RAG Detect] Auto detection: needs_rag={needs_rag}")
     return {"needs_rag": needs_rag}
 
 
@@ -127,6 +133,7 @@ async def rag_retrieve_node(state: MiniClawState) -> Dict[str, Any]:
     """
     messages = state.get("messages", [])
     if not messages:
+        logger.info("[RAG Retrieve] No messages")
         return {"rag_context": "", "rag_sources": []}
 
     last_human_msg = None
@@ -136,42 +143,56 @@ async def rag_retrieve_node(state: MiniClawState) -> Dict[str, Any]:
             break
 
     if not last_human_msg:
+        logger.info("[RAG Retrieve] No human message")
         return {"rag_context": "", "rag_sources": []}
+
+    logger.info(f"[RAG Retrieve] query='{last_human_msg[:50]}...'")
 
     rag_service = get_rag_service()
     kb_names = rag_service.list_kbs()
+    logger.info(f"[RAG Retrieve] Available KBs: {kb_names}")
 
     if not kb_names:
+        logger.warning("[RAG Retrieve] No knowledge bases available")
         return {"rag_context": "", "rag_sources": []}
 
     # 获取用户选择的知识库
     metadata = state.get("metadata") or {}
     selected_kbs = metadata.get("selected_kbs")
+    logger.info(f"[RAG Retrieve] selected_kbs from metadata: {selected_kbs}")
 
     # 如果用户选择了特定知识库，只检索这些；否则检索所有
     if selected_kbs and len(selected_kbs) > 0:
         target_kbs = [name for name in selected_kbs if name in kb_names]
         if not target_kbs:
-            logger.warning(f"Selected KBs not found: {selected_kbs}, falling back to all KBs")
+            logger.warning(f"[RAG Retrieve] Selected KBs not found: {selected_kbs}, falling back to all KBs")
             target_kbs = kb_names
     else:
         target_kbs = kb_names
+
+    logger.info(f"[RAG Retrieve] Target KBs: {target_kbs}")
 
     all_results: List[RetrievalResult] = []
     for kb_name in target_kbs:
         try:
             kb = rag_service.get_kb(kb_name)
             if kb is None:
+                logger.warning(f"[RAG Retrieve] KB '{kb_name}' not found in service")
                 continue
+            logger.info(f"[RAG Retrieve] Searching KB '{kb_name}'...")
             results = kb.search(last_human_msg, k=3)
+            logger.info(f"[RAG Retrieve] KB '{kb_name}' returned {len(results)} results")
             all_results.extend(results)
         except Exception as e:
-            logger.error(f"RAG search failed for KB '{kb_name}': {e}")
+            logger.error(f"[RAG Retrieve] RAG search failed for KB '{kb_name}': {e}")
 
     all_results.sort(key=lambda r: r.score, reverse=True)
     top_results = all_results[:5]
 
+    logger.info(f"[RAG Retrieve] Total results after merge: {len(all_results)}, top 5 selected")
+
     if not top_results:
+        logger.warning("[RAG Retrieve] No results found across all KBs")
         return {"rag_context": "", "rag_sources": []}
 
     context_parts = []
@@ -185,6 +206,7 @@ async def rag_retrieve_node(state: MiniClawState) -> Dict[str, Any]:
         })
 
     context = "\n\n".join(context_parts)
+    logger.info(f"[RAG Retrieve] Context built: {len(context)} chars from {len(top_results)} sources")
     return {"rag_context": context, "rag_sources": sources}
 
 

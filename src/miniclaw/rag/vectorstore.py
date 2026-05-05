@@ -285,17 +285,24 @@ class FAISSVectorStore:
     ) -> List[tuple]:
         self._ensure_loaded()
 
+        logger.info(f"[FAISS] similarity_search: query='{query[:50]}...', k={k}, docs_count={len(self._documents)}, index_size={self._index.ntotal if self._index else 0}")
+
         if not self._documents:
+            logger.warning("[FAISS] No documents in vectorstore")
             return []
 
         try:
             import numpy as np
         except ImportError:
+            logger.error("[FAISS] numpy not available")
             return [(doc, 0.0) for doc in self._documents[:k]]
 
-        query_vector = np.array(
-            self.embeddings.embed_query(query), dtype=np.float32
-        )
+        # Embedding 查询
+        logger.info(f"[FAISS] Embedding query with provider={self.embedding_provider or 'default'}")
+        query_embedding = self.embeddings.embed_query(query)
+        logger.info(f"[FAISS] Query embedding shape: {len(query_embedding)}, first_5={query_embedding[:5]}")
+
+        query_vector = np.array(query_embedding, dtype=np.float32)
 
         if self._index is not None and self._index.ntotal > 0:
             try:
@@ -303,6 +310,7 @@ class FAISSVectorStore:
 
                 search_k = min(k * 3, self._index.ntotal) if filter_expr else min(k, self._index.ntotal)
                 query_2d = query_vector.reshape(1, -1)
+                logger.info(f"[FAISS] Searching index: search_k={search_k}, index_ntotal={self._index.ntotal}")
                 scores, indices = self._index.search(query_2d, search_k)
 
                 results = []
@@ -318,10 +326,13 @@ class FAISSVectorStore:
                         if self._apply_filter([doc], filter_expr)
                     ]
 
+                logger.info(f"[FAISS] Search results: count={len(results[:k])}, scores={[round(s, 4) for _, s in results[:k]]}")
                 return results[:k]
             except Exception as e:
-                logger.error(f"FAISS search failed: {e}")
+                logger.error(f"[FAISS] FAISS search failed: {e}")
 
+        # Fallback: brute force cosine similarity
+        logger.info("[FAISS] Falling back to brute force cosine similarity")
         results = []
         for doc in self._documents:
             if doc.embedding:
@@ -340,6 +351,7 @@ class FAISSVectorStore:
             ]
 
         results.sort(key=lambda x: x[1], reverse=True)
+        logger.info(f"[FAISS] Brute force results: count={len(results[:k])}, scores={[round(s, 4) for _, s in results[:k]]}")
         return results[:k]
 
     async def asimilarity_search(
