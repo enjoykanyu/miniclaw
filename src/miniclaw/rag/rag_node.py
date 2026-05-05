@@ -17,16 +17,14 @@ RAG 节点流程:
 """
 
 from typing import Dict, Any, List, Optional
-import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from loguru import logger
 
 from miniclaw.core.state import MiniClawState
 from miniclaw.rag.service import get_rag_service
 from miniclaw.rag.retriever import HybridRetriever, SearchMode, FusionMethod
 from miniclaw.rag.types import RetrievalResult
-
-logger = logging.getLogger(__name__)
 
 RAG_KEYWORDS = [
     "知识库", "文档", "资料", "文件", "PDF", "pdf",
@@ -248,17 +246,24 @@ async def rag_generate_node(state: MiniClawState) -> Dict[str, Any]:
 def should_retrieve(state: MiniClawState) -> str:
     """条件边：判断是否需要进入 RAG 检索"""
     metadata = state.get("metadata") or {}
+    selected_kbs = metadata.get("selected_kbs")
+    kb_retrieval_mode = metadata.get("kb_retrieval_mode", "intent")
+    needs_rag = state.get("needs_rag", False)
+
+    logger.info(f"[should_retrieve] selected_kbs={selected_kbs}, mode={kb_retrieval_mode}, needs_rag={needs_rag}, force_search={metadata.get('force_search')}")
+
     if metadata.get("force_search"):
-        logger.info("force_search=True, skipping RAG, routing to supervisor")
+        logger.info("[should_retrieve] force_search=True, skipping RAG, routing to supervisor")
         return "skip_rag"
 
     # 如果用户手动选择了知识库且设置为强制检索模式，强制进入RAG
-    selected_kbs = metadata.get("selected_kbs")
-    kb_retrieval_mode = metadata.get("kb_retrieval_mode", "intent")
     if selected_kbs and kb_retrieval_mode == "force":
-        logger.info(f"KB force retrieval mode with selected KBs: {selected_kbs}")
+        logger.info(f"[should_retrieve] KB force retrieval mode with selected KBs: {selected_kbs}")
         return "rag_retrieve"
 
-    if state.get("needs_rag"):
+    if needs_rag:
+        logger.info("[should_retrieve] needs_rag=True, routing to rag_retrieve")
         return "rag_retrieve"
+
+    logger.info("[should_retrieve] No RAG needed, routing to skip_rag")
     return "skip_rag"
