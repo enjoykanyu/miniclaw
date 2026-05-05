@@ -6,6 +6,40 @@
 
 **中文** | [English](README_EN.md) | [日本語](README_JP.md) | [한국어](README_KR.md)
 
+## 功能预览
+
+### 智能对话首页
+
+基于 LangGraph 多 Agent 架构的智能对话界面，支持流式响应、多会话管理、深度思考与联网搜索一键切换。
+
+![首页对话](assets/screenshots/homepage.png)
+
+### 知识库选择
+
+对话时可手动选择多个知识库作为参考来源，支持**意图识别**（自动判断是否需要检索）和**强制检索**两种模式。
+
+![选择知识库](assets/screenshots/kb-select.png)
+
+### 知识库管理
+
+企业级知识库管理，支持自定义嵌入模型、维度、分块策略，拖拽上传文档，自动完成解析→分块→向量化→存储全流程。
+
+![知识库管理](assets/screenshots/kb-management.png)
+
+### Skill 技能扩展
+
+基于 SKILL.md 声明式配置的 Skill 技能市场，支持条件化工具注入，可自由扩展 Agent 能力。
+
+![Skill扩展](assets/screenshots/skill-extension.png)
+
+### MCP 服务器扩展
+
+支持 Model Context Protocol (MCP) 协议，可连接外部 MCP 服务器，扩展无限工具能力。
+
+![MCP扩展](assets/screenshots/mcp-extension.png)
+
+---
+
 ## 核心特性
 
 ### 多智能体协作系统

@@ -6,6 +6,40 @@
 
 [English](README_EN.md) | [中文](README.md) | [日本語](README_JP.md) | **한국어**
 
+## 기능 미리보기
+
+### 지능형 채팅 홈페이지
+
+LangGraph 멀티 에이전트 아키텍처 기반의 지능형 대화 인터페이스로, 스트리밍 응답, 멀티 세션 관리, 딥 씽킹과 웹 검색 원클릭 전환을 지원합니다.
+
+![홈페이지 대화](assets/screenshots/homepage.png)
+
+### 지식 기반 선택
+
+대화 중 여러 지식 기반을 참조 소스로 수동 선택할 수 있으며, **의도 인식** (검색 필요 여부 자동 판단) 및 **강제 검색** 두 가지 모드를 지원합니다.
+
+![KB 선택](assets/screenshots/kb-select.png)
+
+### 지식 기반 관리
+
+엔터프라이즈급 지식 기반 관리로, 임베딩 모델, 차원, 청킹 전략을 사용자 지정할 수 있습니다. 드래그 앤 드롭으로 문서를 업로드하면 파싱→청킹→벡터화→저장 전체 파이프라인이 자동으로 실행됩니다.
+
+![KB 관리](assets/screenshots/kb-management.png)
+
+### Skill 기능 확장
+
+SKILL.md 선언형 설정 기반의 Skill 마켓플레이스로, 조걶 도구 주입을 지원하여 Agent의 능력을 자유롭게 확장할 수 있습니다.
+
+![Skill 확장](assets/screenshots/skill-extension.png)
+
+### MCP 서버 확장
+
+Model Context Protocol (MCP)을 지원하여 외부 MCP 서버에 연결하고 무한한 도구 기능을 확장할 수 있습니다.
+
+![MCP 확장](assets/screenshots/mcp-extension.png)
+
+---
+
 ## 핵심 기능
 
 ### 멀티 에이전트 협업 시스템

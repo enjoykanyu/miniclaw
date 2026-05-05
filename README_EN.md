@@ -6,6 +6,40 @@
 
 **English** | [中文](README.md) | [日本語](README_JP.md) | [한국어](README_KR.md)
 
+## Feature Preview
+
+### Intelligent Chat Homepage
+
+Smart conversation interface based on LangGraph multi-agent architecture, supporting streaming responses, multi-session management, and one-click toggle for deep thinking and web search.
+
+![Homepage Chat](assets/screenshots/homepage.png)
+
+### Knowledge Base Selection
+
+Manually select multiple knowledge bases as reference sources during conversation, supporting both **Intent Recognition** (auto-determine if retrieval is needed) and **Forced Retrieval** modes.
+
+![KB Selection](assets/screenshots/kb-select.png)
+
+### Knowledge Base Management
+
+Enterprise-grade knowledge base management with customizable embedding models, dimensions, and chunking strategies. Drag-and-drop document upload with automatic parsing → chunking → vectorization → storage pipeline.
+
+![KB Management](assets/screenshots/kb-management.png)
+
+### Skill Extension
+
+Skill marketplace based on SKILL.md declarative configuration, supporting conditional tool injection to freely extend Agent capabilities.
+
+![Skill Extension](assets/screenshots/skill-extension.png)
+
+###  MCP Server Extension
+
+Support for Model Context Protocol (MCP), enabling connection to external MCP servers for unlimited tool capability expansion.
+
+![MCP Extension](assets/screenshots/mcp-extension.png)
+
+---
+
 ## Core Features
 
 ### Multi-Agent Collaboration System

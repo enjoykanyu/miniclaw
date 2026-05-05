@@ -6,6 +6,40 @@
 
 [English](README_EN.md) | [中文](README.md) | **日本語** | [한국어](README_KR.md)
 
+## 機能プレビュー
+
+### インテリジェントチャットホームページ
+
+LangGraphマルチエージェントアーキテクチャに基づくインテリジェントな対話インターフェース。ストリーミングレスポンス、マルチセッション管理、ディープシンキングとウェブ検索のワンクリック切り替えをサポートします。
+
+![ホームページ対話](assets/screenshots/homepage.png)
+
+### ナレッジベース選択
+
+対話中に複数のナレッジベースを参照ソースとして手動選択可能。**意図認識**（検索が必要か自動判断）と**強制検索**の両モードをサポートします。
+
+![KB選択](assets/screenshots/kb-select.png)
+
+### ナレッジベース管理
+
+エンタープライズグレードのナレッジベース管理。埋め込みモデル、次元、チャンキング戦略をカスタマイズ可能。ドラッグ＆ドロップでドキュメントをアップロードし、解析→チャンキング→ベクトル化→保存の全自動パイプラインを実行します。
+
+![KB管理](assets/screenshots/kb-management.png)
+
+### Skill機能拡張
+
+SKILL.md宣言型設定に基づくSkillマーケットプレイス。条件付きツール注入をサポートし、Agentの能力を自由に拡張できます。
+
+![Skill拡張](assets/screenshots/skill-extension.png)
+
+### MCPサーバー拡張
+
+Model Context Protocol (MCP) をサポートし、外部MCPサーバーに接続して無限のツール能力を拡張できます。
+
+![MCP拡張](assets/screenshots/mcp-extension.png)
+
+---
+
 ## コア機能
 
 ### マルチエージェント連携システム
