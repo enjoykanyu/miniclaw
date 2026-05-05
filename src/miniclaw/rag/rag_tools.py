@@ -3,8 +3,33 @@ MiniClaw RAG Tools
 LangChain Tool 封装，供 LangGraph Agent 调用
 """
 
+from typing import List, Optional
 from langchain_core.tools import tool
 from miniclaw.rag.service import get_rag_service
+
+# 线程局部存储，用于传递用户选择的知识库
+# 这是工具感知用户选择的桥梁
+_tool_context = {}
+
+
+def set_rag_tool_context(selected_kbs: Optional[List[str]] = None, kb_retrieval_mode: Optional[str] = None):
+    """
+    设置 RAG 工具的上下文（用户选择的知识库和检索模式）
+
+    在 Agent 执行前调用，让工具知道用户选择了哪些知识库
+    """
+    _tool_context["selected_kbs"] = selected_kbs
+    _tool_context["kb_retrieval_mode"] = kb_retrieval_mode
+
+
+def get_rag_tool_context() -> dict:
+    """获取当前 RAG 工具上下文"""
+    return dict(_tool_context)
+
+
+def clear_rag_tool_context():
+    """清除 RAG 工具上下文"""
+    _tool_context.clear()
 
 
 @tool
@@ -15,14 +40,27 @@ def rag_search(query: str, kb_name: str = "default") -> str:
         kb_name: 知识库名称，默认为 'default'
     """
     from loguru import logger
-    logger.info(f"[rag_search tool] Called with query='{query[:50]}...', kb_name='{kb_name}'")
+
+    # 检查是否有用户选择的知识库上下文
+    context = get_rag_tool_context()
+    selected_kbs = context.get("selected_kbs")
+
+    # 如果用户选择了知识库，优先使用用户选择的；否则使用传入的 kb_name
+    if selected_kbs and len(selected_kbs) > 0:
+        # TODO 这里注意得迭代成可以选择多个知识库 使用第一个选择的知识库（或者可以搜索多个）
+        target_kb = selected_kbs[0]
+        logger.info(f"[rag_search tool] User selected KBs: {selected_kbs}, overriding kb_name='{kb_name}' -> '{target_kb}'")
+        kb_name = target_kb
+    else:
+        logger.info(f"[rag_search tool] Called with query='{query[:50]}...', kb_name='{kb_name}'")
+
     rag = get_rag_service()
-    context = rag.get_context(query, kb_name, k=5, max_length=3000)
-    if not context:
+    context_text = rag.get_context(query, kb_name, k=5, max_length=3000)
+    if not context_text:
         logger.warning(f"[rag_search tool] No context found in KB '{kb_name}'")
         return f"知识库 '{kb_name}' 中未找到与 '{query}' 相关的内容。"
-    logger.info(f"[rag_search tool] Returning context: {len(context)} chars")
-    return context
+    logger.info(f"[rag_search tool] Returning context: {len(context_text)} chars")
+    return context_text
 
 
 @tool

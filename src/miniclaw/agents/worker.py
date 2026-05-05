@@ -306,10 +306,23 @@ class BaseWorker(ABC):
             f"force_tools={[t.name for t in self._force_tools]}"
         )
 
-        if self._use_react and (self._base_tools or self._force_tools):
-            return await self._execute_react(state)
-        else:
-            return await self._execute_single_call(state)
+        # 设置 RAG 工具上下文，让 rag_search 知道用户选择了哪些知识库
+        selected_kbs = metadata.get("selected_kbs")
+        kb_retrieval_mode = metadata.get("kb_retrieval_mode")
+        if selected_kbs:
+            from miniclaw.rag.rag_tools import set_rag_tool_context
+            set_rag_tool_context(selected_kbs=selected_kbs, kb_retrieval_mode=kb_retrieval_mode)
+            logger.info(f"Worker[{self.name}] RAG tool context set: selected_kbs={selected_kbs}, mode={kb_retrieval_mode}")
+
+        try:
+            if self._use_react and (self._base_tools or self._force_tools):
+                return await self._execute_react(state)
+            else:
+                return await self._execute_single_call(state)
+        finally:
+            # 清除 RAG 工具上下文，避免污染后续请求
+            from miniclaw.rag.rag_tools import clear_rag_tool_context
+            clear_rag_tool_context()
 
     async def _execute_react(self, state: MiniClawState) -> Dict[str, Any]:
         """
@@ -390,6 +403,11 @@ class BaseWorker(ABC):
         rag_prompt = self._build_rag_prompt(state)
         if rag_prompt:
             system_prompt += rag_prompt
+
+        # 追加知识库选择提示
+        kb_prompt = self._build_kb_prompt(state)
+        if kb_prompt:
+            system_prompt += kb_prompt
 
         # 构建消息列表
         messages: List[Any] = [SystemMessage(content=system_prompt)]
