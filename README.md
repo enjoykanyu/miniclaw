@@ -2,6 +2,8 @@
 
 MiniClaw - 企业级多智能体 AI 助手平台，基于 LangGraph 多代理架构和 LangChain 生态构建，支持深度思考、联网搜索、知识库 RAG、MCP 协议扩展、Skill技能等高级能力。
 
+**中文** | [English](README_EN.md) | [日本語](README_JP.md) | [한국어](README_KR.md)
+
 ## 核心特性
 
 ### 多智能体协作系统
