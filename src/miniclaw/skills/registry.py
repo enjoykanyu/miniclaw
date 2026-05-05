@@ -15,7 +15,7 @@ class Skill:
     description: str
     agent: str           # 绑定到哪个 Agent，如 "info"
     tools: List[SkillToolDef] = field(default_factory=list)  # 工具定义列表
-    content: str = ""    # SKILL.md 中 YAML 后面的 Markdown 内容
+    content: Optional[str] = None  # SKILL.md 中 YAML 后面的 Markdown 内容（延迟加载）
     source: str = ""     # 文件路径，用于调试
 
 
@@ -71,11 +71,35 @@ class SkillRegistry:
                 tools.add(tool_def.name)
         return list(tools)
     
+    def build_skills_summary(self, agent_name: str) -> str:
+        """
+        为指定 Agent 构建技能目录摘要（渐进式披露 Level 1）
+        
+        只包含 name + description，不加载完整 content
+        供 LLM 自主判断是否需要某个 skill
+        
+        Args:
+            agent_name: Agent 名称，如 "info"
+            
+        Returns:
+            格式化的技能目录字符串
+        """
+        skills = self.get_for_agent(agent_name)
+        if not skills:
+            return ""
+        
+        lines = ["【可用技能目录】"]
+        for skill in skills:
+            lines.append(f"- {skill.name}: {skill.description}")
+        
+        return "\n".join(lines)
+    
     def build_prompt_for_agent(self, agent_name: str) -> str:
         """
-        为指定 Agent 构建 skill 提示词
+        为指定 Agent 构建 skill 提示词（完整内容，非渐进式）
         
         将所有匹配的 skill 内容拼接成字符串
+        注意：此方法会加载所有 skill 的完整内容，不适合大量 skill 场景
         """
         skills = self.get_for_agent(agent_name)
         if not skills:
@@ -83,7 +107,8 @@ class SkillRegistry:
         
         sections = []
         for skill in skills:
-            sections.append(f"## {skill.name}\n{skill.description}\n\n{skill.content}")
+            content = skill.content or ""
+            sections.append(f"## {skill.name}\n{skill.description}\n\n{content}")
         
         return "\n\n---\n\n".join(sections)
 
