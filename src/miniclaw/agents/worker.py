@@ -303,27 +303,23 @@ class BaseWorker(ABC):
         1. 如果搜索已在预处理阶段程序化执行 → 直接注入结果，禁止再调用搜索工具
         2. 如果搜索未执行但 force_search=True → 强制要求调用 TAVILY 工具
         3. 如果 force_think=True → 强制要求调用 think 工具
-        """
-        """
-        强制提示词 = Skill 内容 + 动态条件
+        
+        渐进式披露：使用 get_skill_content() 按需加载 skill 内容（带缓存）
         """
         from miniclaw.skills.registry import skill_registry
         
         prompts = []
         metadata = state.get("metadata") or {}
         
-        # 从 Skill 获取能力描述
-        skill_prompt = skill_registry.build_prompt_for_agent(self.name)
-        
-        # 如果 force_search=true，在 Skill 描述基础上追加强制要求
+        # 如果 force_search=true，加载 web_search skill 的完整内容
         if metadata.get("force_search"):
-            # 找到 web_search skill 的内容
-            web_search_skill = skill_registry.get("web_search")
-            if web_search_skill:
-                prompts.append(f"【强制模式 - {web_search_skill.name}】\n{web_search_skill.content}")
+            # 使用 get_skill_content 确保 content 被加载（带缓存）
+            web_search_content = skill_registry.get_skill_content("web_search")
+            if web_search_content:
+                prompts.append(f"【强制模式 - web_search】\n{web_search_content}")
             else:
                 # fallback
-                prompts.append("【强制要求】用户已启用联网搜索...")
+                prompts.append("【强制要求】用户已启用联网搜索，请使用 tavily 工具进行搜索并基于搜索结果回答。")
         
         return "\n".join(prompts)
 
@@ -373,6 +369,9 @@ class BaseWorker(ABC):
 
         关键修复：将搜索结果作为消息传入，而不是通过 state_modifier 注入系统提示词。
         create_react_agent 的 state_modifier 不接受动态拼接的长文本。
+        
+        渐进式披露支持：在 ReAct 执行前，先让 LLM 判断是否需要加载某个 Skill，
+        如果需要则加载完整内容并追加到 messages 中。
         """
         messages = list(state.get("messages", []))
 
@@ -380,6 +379,22 @@ class BaseWorker(ABC):
         force_prompt = self._build_force_prompt(state)
         if force_prompt:
             messages.insert(0, SystemMessage(content=force_prompt))
+
+        # 渐进式披露：预检查 LLM 是否需要某个 Skill
+        # 由于 ReAct Agent 是黑盒，我们在初始化前先发一个 preliminary 请求
+        # 让 LLM 判断是否需要加载 skill
+        preliminary_messages = [
+            SystemMessage(content=self._get_system_prompt() + self._build_skills_prompt(state)),
+            HumanMessage(content=self.get_last_user_message(state))
+        ]
+        preliminary_response = await self.llm.ainvoke(preliminary_messages)
+        
+        # 检查是否需要加载 skill
+        skill_content = self._check_and_load_skill(preliminary_response)
+        if skill_content:
+            logger.info(f"Worker[{self.name}] ReAct 模式预加载 skill，追加到上下文")
+            # 将 skill 内容作为 system message 插入到 messages 最前面
+            messages.insert(0, SystemMessage(content=f"【Skill 详细指令】\n{skill_content}"))
 
         # 使用包含强制工具的 ReAct Agent 执行
         self._init_react_agent_with_state(state, self._force_tools)
@@ -542,13 +557,13 @@ class BaseWorker(ABC):
         """
         检查 LLM 回复是否包含 [SKILL: name] 标记，如果是则加载该 skill 内容
         
-        渐进式披露 ：LLM 自主判断需要某个 skill 后，系统按需加载
+        渐进式披露：LLM 自主判断需要某个 skill 后，系统按需加载
         
         Args:
             response: LLM 的回复消息
             
         Returns:
-            Skill 的完整内容（包括 frontmatter），如果没有请求则返回 None
+            Skill 的 Markdown 内容（不含 frontmatter），如果没有请求则返回 None
         """
         import re
         
@@ -564,16 +579,13 @@ class BaseWorker(ABC):
         skill_name = match.group(1).strip()
         logger.info(f"Worker[{self.name}] LLM 请求加载 skill: {skill_name}")
         
-        # 从 SkillLoader 加载完整内容
-        from miniclaw.skills.loader import SkillLoader
-        loader = SkillLoader()
-        # 先加载所有 skill 建立文件映射
-        loader.load_all()
-        full_content = loader.load_skill_content(skill_name)
+        # 使用全局 SkillRegistry 获取内容（带缓存，避免重复读取文件）
+        from miniclaw.skills.registry import skill_registry
+        skill_content = skill_registry.get_skill_content(skill_name)
         
-        if full_content:
+        if skill_content:
             logger.info(f"Worker[{self.name}] 成功加载 skill '{skill_name}' 内容")
-            return full_content
+            return skill_content
         else:
             logger.warning(f"Worker[{self.name}] 找不到 skill '{skill_name}'")
             return None

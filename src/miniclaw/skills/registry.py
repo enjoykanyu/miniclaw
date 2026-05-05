@@ -22,6 +22,11 @@ class Skill:
 class SkillRegistry:
     """
     Skill 注册表 - 全局单例管理所有已加载的 skills
+    
+    渐进式披露设计：
+    - 启动时只加载 frontmatter（name, description, agent, tools）
+    - content 延迟加载，需要时通过 get_skill_content() 读取
+    - 已加载的 content 会缓存，避免重复读取文件
     """
     
     _instance = None
@@ -31,16 +36,19 @@ class SkillRegistry:
             cls._instance = super().__new__(cls)
             cls._instance._skills = {}
             cls._instance._loaded = False
+            cls._instance._loader = None  # SkillLoader 实例，用于延迟加载
         return cls._instance
     
-    def load_all(self, loader: SkillLoader = None):
+    def load_all(self, loader=None):
         """加载所有 skills，幂等设计"""
         if self._loaded:
             return
         
         if loader is None:
+            from .loader import SkillLoader
             loader = SkillLoader()
         
+        self._loader = loader
         for skill in loader.load_all():
             self._skills[skill.name] = skill
         
@@ -71,6 +79,44 @@ class SkillRegistry:
                 tools.add(tool_def.name)
         return list(tools)
     
+    def get_skill_content(self, name: str) -> Optional[str]:
+        """
+        获取 Skill 完整内容（带缓存的延迟加载）
+        
+        渐进式披露核心方法：
+        - 如果 content 已加载，直接返回缓存
+        - 如果 content 未加载，从文件系统读取并缓存
+        
+        Args:
+            name: skill 名称
+            
+        Returns:
+            SKILL.md 中 frontmatter 后面的 Markdown 内容
+        """
+        skill = self._skills.get(name)
+        if not skill:
+            return None
+        
+        # 如果 content 已加载，直接返回缓存
+        if skill.content is not None:
+            return skill.content
+        
+        # 延迟加载：从文件系统读取完整内容
+        if self._loader:
+            import re
+            full_text = self._loader.load_skill_content(name)
+            if full_text:
+                # 解析 frontmatter，提取 Markdown body
+                match = re.match(r'^---\n(.*?)\n---\n(.*)', full_text, re.DOTALL)
+                if match:
+                    skill.content = match.group(2).strip()
+                else:
+                    skill.content = full_text
+                logger.info(f"[SkillRegistry] 延迟加载 skill '{name}' 内容")
+                return skill.content
+        
+        return None
+    
     def build_skills_summary(self, agent_name: str) -> str:
         """
         为指定 Agent 构建技能目录摘要（渐进式披露 Level 1）
@@ -96,10 +142,9 @@ class SkillRegistry:
     
     def build_prompt_for_agent(self, agent_name: str) -> str:
         """
-        为指定 Agent 构建 skill 提示词（完整内容，非渐进式）
+        为指定 Agent 构建 skill 提示词（完整内容，渐进式）
         
-        将所有匹配的 skill 内容拼接成字符串
-        注意：此方法会加载所有 skill 的完整内容，不适合大量 skill 场景
+        按需加载每个 skill 的完整内容，已加载的会使用缓存
         """
         skills = self.get_for_agent(agent_name)
         if not skills:
@@ -107,7 +152,8 @@ class SkillRegistry:
         
         sections = []
         for skill in skills:
-            content = skill.content or ""
+            # 使用 get_skill_content 确保 content 被加载（带缓存）
+            content = self.get_skill_content(skill.name) or ""
             sections.append(f"## {skill.name}\n{skill.description}\n\n{content}")
         
         return "\n\n---\n\n".join(sections)
