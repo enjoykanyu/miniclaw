@@ -441,6 +441,15 @@ class BaseWorker(ABC):
         llm_with_tools = self.bind_tools(self._force_tools)
         response = await llm_with_tools.ainvoke(messages)
 
+        # 校验 LLM 是否请求加载某个 Skill（渐进式披露 ）
+        skill_content = self._check_and_load_skill(response)
+        if skill_content:
+            # LLM 请求了某个 skill，加载其内容并重新调用
+            logger.info(f"Worker[{self.name}] LLM 请求加载 skill，重新调用")
+            messages.append(response)
+            messages.append(SystemMessage(content=f"【Skill 详细指令】\n{skill_content}"))
+            response = await llm_with_tools.ainvoke(messages)
+
         # 检查是否有强制要求但未调用的工具
         required_tools = self._get_required_tools(state)
         called_tools = []
@@ -498,6 +507,46 @@ class BaseWorker(ABC):
 
         final_response = await self.llm.ainvoke(final_messages)
         return final_response.content
+
+    def _check_and_load_skill(self, response: Any) -> Optional[str]:
+        """
+        检查 LLM 回复是否包含 [SKILL: name] 标记，如果是则加载该 skill 内容
+        
+        渐进式披露 ：LLM 自主判断需要某个 skill 后，系统按需加载
+        
+        Args:
+            response: LLM 的回复消息
+            
+        Returns:
+            Skill 的完整内容（包括 frontmatter），如果没有请求则返回 None
+        """
+        import re
+        
+        content = ""
+        if hasattr(response, "content"):
+            content = response.content or ""
+        
+        # 匹配 [SKILL: skill-name] 标记
+        match = re.search(r'\[SKILL:\s*([^\]]+)\]', content)
+        if not match:
+            return None
+        
+        skill_name = match.group(1).strip()
+        logger.info(f"Worker[{self.name}] LLM 请求加载 skill: {skill_name}")
+        
+        # 从 SkillLoader 加载完整内容
+        from miniclaw.skills.loader import SkillLoader
+        loader = SkillLoader()
+        # 先加载所有 skill 建立文件映射
+        loader.load_all()
+        full_content = loader.load_skill_content(skill_name)
+        
+        if full_content:
+            logger.info(f"Worker[{self.name}] 成功加载 skill '{skill_name}' 内容")
+            return full_content
+        else:
+            logger.warning(f"Worker[{self.name}] 找不到 skill '{skill_name}'")
+            return None
 
     def _extract_tool_name(self, tool_call: Dict[str, Any]) -> str:
         """提取工具名称"""
