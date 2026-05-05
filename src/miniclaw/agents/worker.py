@@ -6,7 +6,7 @@ Worker Agent 是被 Supervisor 调用的专业智能体
 """
 from loguru import logger
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Any, Dict, List, Optional, Callable
 
 from langchain_core.language_models import BaseChatModel

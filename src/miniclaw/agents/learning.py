@@ -3,7 +3,7 @@ MiniClaw Learning Agent - Worker Agent
 Handles study planning, progress tracking, and quiz generation
 """
 
-from typing import List, Optional, Any
+from typing import Optional, Any
 from datetime import datetime, timedelta
 
 from langchain_core.tools import tool

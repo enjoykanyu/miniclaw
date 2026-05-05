@@ -3,7 +3,7 @@ MiniClaw Base Agent Class
 使用 AgentExecutor 模式实现自动化工具调用
 """
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Any, Dict, List, Optional, Callable
 
 from langchain_core.language_models import BaseChatModel
@@ -12,7 +12,7 @@ from langchain_core.tools import BaseTool
 from langgraph.prebuilt import create_react_agent
 
 from miniclaw.core.state import MiniClawState
-from miniclaw.utils.llm import get_llm, get_smart_llm
+from miniclaw.utils.llm import get_smart_llm
 from miniclaw.skills.registry import skill_registry
 
 
