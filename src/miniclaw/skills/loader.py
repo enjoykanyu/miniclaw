@@ -13,6 +13,10 @@ class SkillLoader:
     """
     扫描 skills/ 目录下的所有 SKILL.md，解析 YAML frontmatter
     
+    渐进式披露设计：
+    - 启动时只加载 frontmatter（name, description, agent, tools）
+    - content 延迟加载，需要时通过 load_skill_content() 读取
+    
     支持两种 tools 格式：
     1. 简单列表: tools: [tavily, get_news]
     2. 详细定义:
@@ -30,9 +34,11 @@ class SkillLoader:
                 "builtin"                   # skills/builtin/
             )
         self.base_path = Path(base_path)
+        # 记录文件路径映射，用于延迟加载 content
+        self._file_map: Dict[str, Path] = {}
     
     def load_all(self) -> List[Skill]:
-        """递归扫描所有 SKILL.md"""
+        """递归扫描所有 SKILL.md，只加载 frontmatter"""
         skills = []
         
         # 查找所有 SKILL.md 文件
@@ -40,8 +46,26 @@ class SkillLoader:
             skill = self._parse_file(skill_file)
             if skill:
                 skills.append(skill)
+                # 记录 name -> file_path 映射，用于后续延迟加载
+                self._file_map[skill.name] = skill_file
         
         return skills
+    
+    def load_skill_content(self, name: str) -> Optional[str]:
+        """
+        按需加载指定 skill 的完整内容（渐进式披露）
+        
+        Args:
+            name: skill 名称
+            
+        Returns:
+            SKILL.md 的完整内容（包括 frontmatter），如果找不到返回 None
+        """
+        file_path = self._file_map.get(name)
+        if not file_path or not file_path.exists():
+            return None
+        
+        return file_path.read_text(encoding="utf-8")
     
     def _parse_tools(self, tools_raw: list) -> List[SkillToolDef]:
         """
@@ -72,7 +96,10 @@ class SkillLoader:
     
     def _parse_file(self, file_path: Path) -> Optional[Skill]:
         """
-        解析单个 SKILL.md 文件
+        解析单个 SKILL.md 文件的 frontmatter（渐进式披露 Level 1）
+        
+        只读取 YAML frontmatter，不加载 Markdown body
+        Markdown body 通过 load_skill_content() 按需加载
         
         格式:
         ---
@@ -96,7 +123,8 @@ class SkillLoader:
             return None
         
         yaml_text = match.group(1)
-        markdown_content = match.group(2).strip()
+        # 不读取 markdown_content，延迟加载
+        # markdown_content = match.group(2).strip()
         
         try:
             frontmatter = yaml.safe_load(yaml_text)
@@ -112,6 +140,6 @@ class SkillLoader:
             description=frontmatter.get("description", ""),
             agent=frontmatter.get("agent", ""),
             tools=tools,
-            content=markdown_content,
+            content=None,  # 延迟加载，不读取 Markdown body
             source=str(file_path.relative_to(self.base_path.parent))
         )
