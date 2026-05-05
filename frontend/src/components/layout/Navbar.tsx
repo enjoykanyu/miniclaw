@@ -2,15 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Plus, Settings, Bot, ChevronRight, Database } from "lucide-react";
+import { Plus, Settings, Bot, ChevronRight, Database, Server, Zap } from "lucide-react";
 
 import { useAppStore } from "@/lib/store";
 import { InspectorPanel } from "@/components/editor/InspectorPanel";
 import { KnowledgeBasePanel } from "@/components/knowledge/KnowledgeBasePanel";
+import { McpPlazaPanel } from "@/components/mcp/McpPlazaPanel";
+import { SkillMarketPanel } from "@/components/skill/SkillMarketPanel";
 
 export function Navbar() {
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [isKbOpen, setIsKbOpen] = useState(false);
+  const [isMcpOpen, setIsMcpOpen] = useState(false);
+  const [isSkillOpen, setIsSkillOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -130,6 +134,50 @@ export function Navbar() {
           <button
             style={{
               display: "flex",
+              alignItems: "center",
+              gap: 6,
+              borderRadius: 8,
+              border: "1px solid #e5e5e5",
+              padding: "6px 12px",
+              fontSize: 13,
+              color: "#666666",
+              backgroundColor: "#ffffff",
+              cursor: "pointer",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f0f0f0")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ffffff")}
+            onClick={() => setIsMcpOpen(true)}
+            title="MCP 服务器"
+            type="button"
+          >
+            <Server size={14} />
+            MCP
+          </button>
+          <button
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              borderRadius: 8,
+              border: "1px solid #e5e5e5",
+              padding: "6px 12px",
+              fontSize: 13,
+              color: "#666666",
+              backgroundColor: "#ffffff",
+              cursor: "pointer",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f0f0f0")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ffffff")}
+            onClick={() => setIsSkillOpen(true)}
+            title="Skill 技能市场"
+            type="button"
+          >
+            <Zap size={14} />
+            技能
+          </button>
+          <button
+            style={{
+              display: "flex",
               height: 32,
               width: 32,
               alignItems: "center",
@@ -220,6 +268,80 @@ export function Navbar() {
             }}
           >
             <KnowledgeBasePanel onClose={() => setIsKbOpen(false)} />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {isMcpOpen && mounted && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.3)",
+              backdropFilter: "blur(4px)",
+            }}
+            onClick={() => setIsMcpOpen(false)}
+          />
+          <div
+            style={{
+              position: "relative",
+              zIndex: 10,
+              display: "flex",
+              height: "85vh",
+              width: "90vw",
+              maxWidth: 1100,
+              flexDirection: "column",
+            }}
+          >
+            <McpPlazaPanel onClose={() => setIsMcpOpen(false)} />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {isSkillOpen && mounted && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.3)",
+              backdropFilter: "blur(4px)",
+            }}
+            onClick={() => setIsSkillOpen(false)}
+          />
+          <div
+            style={{
+              position: "relative",
+              zIndex: 10,
+              display: "flex",
+              height: "85vh",
+              width: "90vw",
+              maxWidth: 1100,
+              flexDirection: "column",
+            }}
+          >
+            <SkillMarketPanel onClose={() => setIsSkillOpen(false)} />
           </div>
         </div>,
         document.body
