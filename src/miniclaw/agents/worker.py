@@ -126,6 +126,19 @@ class BaseWorker(ABC):
             state_modifier=system_prompt,
         )
 
+    def _build_kb_prompt(self, state: MiniClawState) -> str:
+        """构建知识库选择提示词，让 LLM 知道用户选择了哪些知识库"""
+        metadata = state.get("metadata") or {}
+        selected_kbs = metadata.get("selected_kbs")
+        if not selected_kbs:
+            return ""
+        kb_list = ", ".join(selected_kbs)
+        return (
+            f"\n\n【知识库选择】\n"
+            f"用户已选择以下知识库作为参考来源：{kb_list}\n"
+            f"当你调用 rag_search 工具时，系统会自动使用这些知识库进行搜索。\n"
+        )
+
     def _init_react_agent_with_state(self, state: MiniClawState, extra_tools: Optional[List[BaseTool]] = None) -> None:
         """初始化 ReAct Agent，支持动态工具注入 + 强制搜索上下文注入"""
         system_prompt = self._get_system_prompt()
@@ -134,6 +147,11 @@ class BaseWorker(ABC):
         rag_prompt = self._build_rag_prompt(state)
         if rag_prompt:
             system_prompt += rag_prompt
+
+        # 追加知识库选择提示
+        kb_prompt = self._build_kb_prompt(state)
+        if kb_prompt:
+            system_prompt += kb_prompt
 
         all_tools = list(self._base_tools)
         all_tools.extend(self._get_mcp_tools())
