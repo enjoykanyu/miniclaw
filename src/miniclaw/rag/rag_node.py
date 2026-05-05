@@ -113,6 +113,10 @@ async def rag_detect_node(state: MiniClawState) -> Dict[str, Any]:
     # 如果用户手动选择了知识库但使用意图识别模式，仍然做检测
     if selected_kbs and kb_retrieval_mode == "intent":
         needs_rag = detect_rag_need(last_human_msg, strategy="hybrid")
+        # TODO 用户手动选择了知识库，但意图识别未命中，这里得对比下强制检索的区别
+        if not needs_rag:
+            logger.info(f"[RAG Detect] Intent detection returned False, but user selected KBs {selected_kbs}, forcing RAG")
+            needs_rag = True
         logger.info(f"[RAG Detect] Intent detection with selected_kbs: needs_rag={needs_rag}")
         return {"needs_rag": needs_rag}
 
