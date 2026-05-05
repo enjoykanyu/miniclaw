@@ -18,13 +18,12 @@ from datetime import datetime
 from pathlib import Path
 import json
 import os
-import logging
+
+from loguru import logger
 
 from miniclaw.config.settings import settings
 from miniclaw.rag.embeddings import get_embeddings, get_embedding_dimension
 from miniclaw.rag.types import Document
-
-logger = logging.getLogger(__name__)
 
 
 class FAISSVectorStore:
