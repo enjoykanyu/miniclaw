@@ -76,11 +76,15 @@ class BaseAgent(ABC):
         """
         base_prompt = f"你是 {self.name}，{self.description}"
         
-        # 从注册表获取当前 Agent 的 skills
-        skill_prompt = skill_registry.build_prompt_for_agent(self.name)
+        # 从注册表获取当前 Agent 的技能目录摘要（仅 name + description）
+        skills_summary = skill_registry.build_skills_summary(self.name)
         
-        if skill_prompt:
-            return f"{base_prompt}\n\n# 你的能力\n\n{skill_prompt}"
+        if skills_summary:
+            return (
+                f"{base_prompt}\n\n{skills_summary}\n\n"
+                f"当你需要使用某个技能时，请回复：[SKILL: skill-name]\n"
+                f"系统会自动加载该技能的详细指令。"
+            )
         
         return base_prompt
 

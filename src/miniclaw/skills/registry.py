@@ -140,23 +140,7 @@ class SkillRegistry:
         
         return "\n".join(lines)
     
-    def build_prompt_for_agent(self, agent_name: str) -> str:
-        """
-        为指定 Agent 构建 skill 提示词（完整内容，渐进式）
-        
-        按需加载每个 skill 的完整内容，已加载的会使用缓存
-        """
-        skills = self.get_for_agent(agent_name)
-        if not skills:
-            return ""
-        
-        sections = []
-        for skill in skills:
-            # 使用 get_skill_content 确保 content 被加载（带缓存）
-            content = self.get_skill_content(skill.name) or ""
-            sections.append(f"## {skill.name}\n{skill.description}\n\n{content}")
-        
-        return "\n\n---\n\n".join(sections)
+
 
 
 # 全局单例
