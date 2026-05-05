@@ -74,7 +74,7 @@ class InfoAgent(BaseWorker):
 
     def _get_system_prompt(self) -> str:
         """获取信息获取的系统提示词"""
-        return self._prompts.get("system", """你是信息获取助手，帮助用户查询天气、新闻和知识。
+        base_prompt = self._prompts.get("system", """你是信息获取助手，帮助用户查询天气、新闻和知识。
 
 你可以使用以下工具：
 1. `get_weather` - 查询指定城市的天气信息
@@ -86,6 +86,7 @@ class InfoAgent(BaseWorker):
 - 不要依赖你的训练数据回答时效性问题，必须调用工具获取最新信息。
 - 如果工具返回错误或没有数据，请如实告知用户。
 - 如果系统已提供联网搜索结果，请优先基于搜索结果回答。""")
+        return base_prompt
 
     def format_tool_result(self, tool_name: str, result: Any) -> Optional[str]:
         """自定义工具结果格式化"""
