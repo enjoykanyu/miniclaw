@@ -48,17 +48,18 @@ def rag_search(query: str, kb_name: str = "default") -> str:
     # 如果用户选择了知识库，优先使用用户选择的；否则使用传入的 kb_name
     if selected_kbs and len(selected_kbs) > 0:
         # TODO 这里注意得迭代成可以选择多个知识库 使用第一个选择的知识库（或者可以搜索多个）
-        target_kb = selected_kbs[0]
+        target_kb = selected_kbs
         logger.info(f"[rag_search tool] User selected KBs: {selected_kbs}, overriding kb_name='{kb_name}' -> '{target_kb}'")
         kb_name = target_kb
     else:
         logger.info(f"[rag_search tool] Called with query='{query[:50]}...', kb_name='{kb_name}'")
 
     rag = get_rag_service()
-    context_text = rag.get_context(query, kb_name, k=5, max_length=3000)
-    if not context_text:
-        logger.warning(f"[rag_search tool] No context found in KB '{kb_name}'")
-        return f"知识库 '{kb_name}' 中未找到与 '{query}' 相关的内容。"
+    for kb in kb_name:
+        context_text += rag.get_context(query, kb, k=5, max_length=3000)
+        if not context_text:
+            logger.warning(f"[rag_search tool] No context found in KB '{kb}'")
+            return f"知识库 '{kb}' 中未找到与 '{query}' 相关的内容。"
     logger.info(f"[rag_search tool] Returning context: {len(context_text)} chars")
     return context_text
 
