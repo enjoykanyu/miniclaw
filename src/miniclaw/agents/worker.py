@@ -126,6 +126,26 @@ class BaseWorker(ABC):
             state_modifier=system_prompt,
         )
 
+    def _build_skills_prompt(self, state: MiniClawState) -> str:
+        """
+        构建技能目录提示词（渐进式披露 Level 1）
+
+
+        将当前 Agent 绑定的技能目录注入 system prompt
+        让 LLM 自主判断是否需要某个 skill
+        """
+        from miniclaw.skills.registry import skill_registry
+        
+        summary = skill_registry.build_skills_summary(self.name)
+        if not summary:
+            return ""
+        
+        return (
+            f"\n\n{summary}\n"
+            f"\n当你需要使用某个技能时，请回复：[SKILL: skill-name]\n"
+            f"系统会自动加载该技能的详细指令。\n"
+        )
+
     def _build_kb_prompt(self, state: MiniClawState) -> str:
         """构建知识库选择提示词，让 LLM 知道用户选择了哪些知识库"""
         metadata = state.get("metadata") or {}
@@ -152,6 +172,11 @@ class BaseWorker(ABC):
         kb_prompt = self._build_kb_prompt(state)
         if kb_prompt:
             system_prompt += kb_prompt
+
+        # 追加技能目录提示（渐进式披露）
+        skills_prompt = self._build_skills_prompt(state)
+        if skills_prompt:
+            system_prompt += skills_prompt
 
         all_tools = list(self._base_tools)
         all_tools.extend(self._get_mcp_tools())
@@ -426,6 +451,11 @@ class BaseWorker(ABC):
         kb_prompt = self._build_kb_prompt(state)
         if kb_prompt:
             system_prompt += kb_prompt
+
+        # 追加技能目录提示（渐进式披露）
+        skills_prompt = self._build_skills_prompt(state)
+        if skills_prompt:
+            system_prompt += skills_prompt
 
         # 构建消息列表
         messages: List[Any] = [SystemMessage(content=system_prompt)]
