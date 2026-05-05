@@ -1,6 +1,8 @@
-2# MiniClaw
-
-MiniClaw - 엔터프라이즈급 멀티 에이전트 AI 어시스턴트 플랫폼입니다. LangGraph 멀티 에이전트 아키텍처와 LangChain 생태계를 기반으로 구축되었으며, 딥 씽킹, 웹 검색, 지식 기반 RAG, MCP 프로토콜 확장, Skill 시스템 등의 고급 기능을 지원합니다.
+<div align="center">
+  <img src="assets/logo.svg" alt="MiniClaw Logo" width="180" height="180">
+  <h1>MiniClaw</h1>
+  <p>엔터프라이즈급 멀티 에이전트 AI 어시스턴트 플랫폼입니다. LangGraph 멀티 에이전트 아키텍처와 LangChain 생태계를 기반으로 구축되었으며, 딥 씽킹, 웹 검색, 지식 기반 RAG, MCP 프로토콜 확장, Skill 시스템 등의 고급 기능을 지원합니다.</p>
+</div>
 
 [English](README_EN.md) | [中文](README.md) | [日本語](README_JP.md) | **한국어**
 

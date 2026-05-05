@@ -1,6 +1,8 @@
-# MiniClaw
-
-MiniClaw - Enterprise-grade Multi-Agent AI Assistant Platform, built on LangGraph multi-agent architecture and LangChain ecosystem, supporting deep thinking, web search, knowledge base RAG, MCP protocol extension, Skill system and other advanced capabilities.
+<div align="center">
+  <img src="assets/logo.svg" alt="MiniClaw Logo" width="180" height="180">
+  <h1>MiniClaw</h1>
+  <p>Enterprise-grade Multi-Agent AI Assistant Platform, built on LangGraph multi-agent architecture and LangChain ecosystem, supporting deep thinking, web search, knowledge base RAG, MCP protocol extension, Skill system and other advanced capabilities.</p>
+</div>
 
 **English** | [中文](README.md) | [日本語](README_JP.md) | [한국어](README_KR.md)
 

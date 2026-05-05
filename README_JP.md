@@ -1,6 +1,8 @@
-# MiniClaw
-
-MiniClaw - エンタープライズグレードのマルチエージェントAIアシスタントプラットフォーム。LangGraphマルチエージェントアーキテクチャとLangChainエコシステムをベースに構築されており、ディープシンキング、ウェブ検索、ナレッジベースRAG、MCPプロトコル拡張、Skillシステムなどの高度な機能をサポートしています。
+<div align="center">
+  <img src="assets/logo.svg" alt="MiniClaw Logo" width="180" height="180">
+  <h1>MiniClaw</h1>
+  <p>エンタープライズグレードのマルチエージェントAIアシスタントプラットフォーム。LangGraphマルチエージェントアーキテクチャとLangChainエコシステムをベースに構築されており、ディープシンキング、ウェブ検索、ナレッジベースRAG、MCPプロトコル拡張、Skillシステムなどの高度な機能をサポートしています。</p>
+</div>
 
 [English](README_EN.md) | [中文](README.md) | **日本語** | [한국어](README_KR.md)
 
