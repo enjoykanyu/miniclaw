@@ -9,6 +9,8 @@ import os
 import json
 from datetime import datetime
 
+from loguru import logger
+
 from miniclaw.config.settings import settings
 from miniclaw.rag.types import Document, RetrievalResult
 from miniclaw.rag.vectorstore import FAISSVectorStore, MilvusVectorStore, get_vectorstore
