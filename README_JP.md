@@ -12,19 +12,19 @@
 
 LangGraphマルチエージェントアーキテクチャに基づくインテリジェントな対話インターフェース。ストリーミングレスポンス、マルチセッション管理、ディープシンキングとウェブ検索のワンクリック切り替えをサポートします。
 
-![ホームページ対話](assets/screenshots/homepage.png)
+![ホームページ対話](assets/screenshots/homepage.gif)
 
 ### ナレッジベース選択
 
 対話中に複数のナレッジベースを参照ソースとして手動選択可能。**意図認識**（検索が必要か自動判断）と**強制検索**の両モードをサポートします。
 
-![KB選択](assets/screenshots/kb-select.png)
+![KB選択](assets/screenshots/kb-select.gif)
 
 ### ナレッジベース管理
 
 エンタープライズグレードのナレッジベース管理。埋め込みモデル、次元、チャンキング戦略をカスタマイズ可能。ドラッグ＆ドロップでドキュメントをアップロードし、解析→チャンキング→ベクトル化→保存の全自動パイプラインを実行します。
 
-![KB管理](assets/screenshots/kb-management.png)
+![KB管理](assets/screenshots/kb-management.gif)
 
 ### Skill機能拡張
 

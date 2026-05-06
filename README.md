@@ -12,19 +12,19 @@
 
 基于 LangGraph 多 Agent 架构的智能对话界面，支持流式响应、多会话管理、深度思考与联网搜索一键切换。
 
-![首页对话](assets/screenshots/homepage.png)
+![首页对话](assets/screenshots/homepage.gif)
 
 ### 知识库选择
 
 对话时可手动选择多个知识库作为参考来源，支持**意图识别**（自动判断是否需要检索）和**强制检索**两种模式。
 
-![选择知识库](assets/screenshots/kb-select.png)
+![选择知识库](assets/screenshots/kb-select.gif)
 
 ### 知识库管理
 
 企业级知识库管理，支持自定义嵌入模型、维度、分块策略，拖拽上传文档，自动完成解析→分块→向量化→存储全流程。
 
-![知识库管理](assets/screenshots/kb-management.png)
+![知识库管理](assets/screenshots/kb-management.gif)
 
 ### Skill 技能扩展
 

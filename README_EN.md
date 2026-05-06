@@ -12,19 +12,19 @@
 
 Smart conversation interface based on LangGraph multi-agent architecture, supporting streaming responses, multi-session management, and one-click toggle for deep thinking and web search.
 
-![Homepage Chat](assets/screenshots/homepage.png)
+![Homepage Chat](assets/screenshots/homepage.gif)
 
 ### Knowledge Base Selection
 
 Manually select multiple knowledge bases as reference sources during conversation, supporting both **Intent Recognition** (auto-determine if retrieval is needed) and **Forced Retrieval** modes.
 
-![KB Selection](assets/screenshots/kb-select.png)
+![KB Selection](assets/screenshots/kb-select.gif)
 
 ### Knowledge Base Management
 
 Enterprise-grade knowledge base management with customizable embedding models, dimensions, and chunking strategies. Drag-and-drop document upload with automatic parsing → chunking → vectorization → storage pipeline.
 
-![KB Management](assets/screenshots/kb-management.png)
+![KB Management](assets/screenshots/kb-management.gif)
 
 ### Skill Extension
 

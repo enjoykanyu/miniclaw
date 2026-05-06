@@ -12,19 +12,19 @@
 
 LangGraph 멀티 에이전트 아키텍처 기반의 지능형 대화 인터페이스로, 스트리밍 응답, 멀티 세션 관리, 딥 씽킹과 웹 검색 원클릭 전환을 지원합니다.
 
-![홈페이지 대화](assets/screenshots/homepage.png)
+![홈페이지 대화](assets/screenshots/homepage.gif)
 
 ### 지식 기반 선택
 
 대화 중 여러 지식 기반을 참조 소스로 수동 선택할 수 있으며, **의도 인식** (검색 필요 여부 자동 판단) 및 **강제 검색** 두 가지 모드를 지원합니다.
 
-![KB 선택](assets/screenshots/kb-select.png)
+![KB 선택](assets/screenshots/kb-select.gif)
 
 ### 지식 기반 관리
 
 엔터프라이즈급 지식 기반 관리로, 임베딩 모델, 차원, 청킹 전략을 사용자 지정할 수 있습니다. 드래그 앤 드롭으로 문서를 업로드하면 파싱→청킹→벡터화→저장 전체 파이프라인이 자동으로 실행됩니다.
 
-![KB 관리](assets/screenshots/kb-management.png)
+![KB 관리](assets/screenshots/kb-management.gif)
 
 ### Skill 기능 확장
 
