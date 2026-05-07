@@ -30,6 +30,8 @@ type Message = {
   timestamp: number;
 };
 
+export type AgentMode = "assistant" | "companion";
+
 type AppStore = {
   sessions: SessionSummary[];
   currentSessionId: string | null;
@@ -47,6 +49,7 @@ type AppStore = {
   inspectorDirty: boolean;
   sidebarWidth: number;
   tokenStats: { total_tokens: number } | null;
+  agentMode: AgentMode;
   createNewSession: () => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;
   sendMessage: (value: string) => Promise<void>;
@@ -61,6 +64,7 @@ type AppStore = {
   updateInspectorContent: (value: string) => void;
   saveInspector: () => Promise<void>;
   setSidebarWidth: (width: number) => void;
+  setAgentMode: (mode: AgentMode) => void;
 };
 
 const FIXED_FILES = [
@@ -108,6 +112,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [inspectorDirty, setInspectorDirty] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(308);
   const [tokenStats, setTokenStats] = useState<{ total_tokens: number } | null>(null);
+  const [agentMode, setAgentModeState] = useState<AgentMode>("assistant");
 
   const editableFiles = useMemo(
     () => [...FIXED_FILES, ...skills.map((skill) => skill.path)],
@@ -190,7 +195,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       await streamChat(
-        { message: value.trim(), session_id: sessionId, force_think: forceThink, force_search: forceSearch, selected_kbs: selectedKbs, kb_retrieval_mode: kbRetrievalMode },
+        { message: value.trim(), session_id: sessionId, force_think: forceThink, force_search: forceSearch, selected_kbs: selectedKbs, kb_retrieval_mode: kbRetrievalMode, agent_mode: agentMode },
         {
           onEvent(event, data) {
             console.log("[SSE event]", event, data);
@@ -459,6 +464,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  function setAgentMode(mode: AgentMode) {
+    setAgentModeState(mode);
+  }
+
   const value: AppStore = {
     sessions,
     currentSessionId,
@@ -476,6 +485,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     inspectorDirty,
     sidebarWidth,
     tokenStats,
+    agentMode,
     createNewSession,
     selectSession,
     sendMessage,
@@ -489,7 +499,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadInspectorFile,
     updateInspectorContent,
     saveInspector,
-    setSidebarWidth
+    setSidebarWidth,
+    setAgentMode
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

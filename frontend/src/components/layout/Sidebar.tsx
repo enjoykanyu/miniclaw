@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { MessageSquare, Plus, Trash2, Bot, AlertTriangle } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Bot, AlertTriangle, Sparkles, Heart } from "lucide-react";
 
 import { useAppStore } from "@/lib/store";
+import type { AgentMode } from "@/lib/store";
 
 export function Sidebar() {
   const {
@@ -12,9 +13,15 @@ export function Sidebar() {
     selectSession,
     createNewSession,
     removeSession,
+    agentMode,
+    setAgentMode,
   } = useAppStore();
 
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  const isCompanion = agentMode === "companion";
+  const accentColor = isCompanion ? "#ec4899" : "#10a37f";
+  const accentSoft = isCompanion ? "rgba(236, 72, 153, 0.1)" : "rgba(16, 163, 127, 0.1)";
 
   const handleDelete = (sessionId: string) => {
     setDeleteTarget(sessionId);
@@ -51,7 +58,7 @@ export function Sidebar() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Bot size={20} style={{ color: "#10a37f" }} />
+            <Bot size={20} style={{ color: accentColor }} />
             <span style={{ fontSize: 14, fontWeight: 600, color: "#1a1a1a" }}>MiniClaw</span>
           </div>
           <button
@@ -75,6 +82,68 @@ export function Sidebar() {
           >
             <Plus size={16} />
           </button>
+        </div>
+
+        {/* Agent 模式切换 */}
+        <div style={{ padding: "12px 12px 8px" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 4,
+              padding: 4,
+              borderRadius: 10,
+              backgroundColor: "#f0f0f0",
+            }}
+          >
+            <button
+              onClick={() => setAgentMode("assistant")}
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                padding: "8px 0",
+                borderRadius: 8,
+                border: "none",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "all 0.2s",
+                backgroundColor: !isCompanion ? "#ffffff" : "transparent",
+                color: !isCompanion ? "#10a37f" : "#999999",
+                boxShadow: !isCompanion ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+              }}
+              type="button"
+            >
+              <Sparkles size={14} />
+              个人助理
+            </button>
+            <button
+              onClick={() => setAgentMode("companion")}
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                padding: "8px 0",
+                borderRadius: 8,
+                border: "none",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "all 0.2s",
+                backgroundColor: isCompanion ? "#ffffff" : "transparent",
+                color: isCompanion ? "#ec4899" : "#999999",
+                boxShadow: isCompanion ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+              }}
+              type="button"
+            >
+              <Heart size={14} />
+              情感陪伴
+            </button>
+          </div>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", paddingTop: 8 }}>
@@ -104,8 +173,8 @@ export function Sidebar() {
                   padding: "10px 12px",
                   cursor: "pointer",
                   backgroundColor:
-                    session.id === currentSessionId ? "rgba(16, 163, 127, 0.1)" : "transparent",
-                  color: session.id === currentSessionId ? "#10a37f" : "#1a1a1a",
+                    session.id === currentSessionId ? accentSoft : "transparent",
+                  color: session.id === currentSessionId ? accentColor : "#1a1a1a",
                   transition: "background-color 0.15s",
                 }}
                 onMouseEnter={(e) => {

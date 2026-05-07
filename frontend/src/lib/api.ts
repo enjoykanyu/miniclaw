@@ -236,6 +236,7 @@ export async function streamChat(
     force_search?: boolean;
     selected_kbs?: string[];
     kb_retrieval_mode?: "intent" | "force";
+    agent_mode?: "assistant" | "companion";
   },
   handlers: StreamHandlers
 ) {
