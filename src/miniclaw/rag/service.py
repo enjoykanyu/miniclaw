@@ -15,6 +15,7 @@ from miniclaw.config.settings import settings
 from miniclaw.rag.types import Document, RetrievalResult
 from miniclaw.rag.vectorstore import FAISSVectorStore, MilvusVectorStore, get_vectorstore
 from miniclaw.rag.document_loader import DocumentLoader
+from miniclaw.rag.retriever import HybridRetriever, SearchMode, FusionMethod
 
 
 class KnowledgeBase:
@@ -36,6 +37,7 @@ class KnowledgeBase:
         )
         self.config = config or {}
         self._vectorstore = None
+        self._retriever = None
         self._loader = DocumentLoader(
             chunk_size=self.config.get("chunk_size", 512),
             chunk_overlap=self.config.get("chunk_overlap", 50)
@@ -50,11 +52,24 @@ class KnowledgeBase:
             )
         return self._vectorstore
 
+    @property
+    def retriever(self):
+        if self._retriever is None:
+            self._retriever = HybridRetriever(
+                vectorstore=self.vectorstore,
+                collection_name=self.name,
+                persist_dir=os.path.join(self.persist_dir, "bm25"),
+                bm25_k1=self.config.get("bm25_k1", 1.5),
+                bm25_b=self.config.get("bm25_b", 0.75),
+            )
+        return self._retriever
+
     def add_files(self, file_paths: List[str]) -> int:
         documents = self._loader.load_files(file_paths)
         if not documents:
             return 0
         count = self.vectorstore.add_documents(documents)
+        self.retriever.index_documents(documents)
         self._save_kb_meta(count, is_incremental=True)
         return count
 
@@ -63,6 +78,7 @@ class KnowledgeBase:
         if not documents:
             return 0
         count = self.vectorstore.add_documents(documents)
+        self.retriever.index_documents(documents)
         self._save_kb_meta(count, is_incremental=True)
         return count
 
@@ -71,6 +87,7 @@ class KnowledgeBase:
         if not documents:
             return 0
         count = await self.vectorstore.aadd_documents(documents)
+        self.retriever.index_documents(documents)
         self._save_kb_meta(count, is_incremental=True)
         return count
 
@@ -79,6 +96,7 @@ class KnowledgeBase:
         if not documents:
             return 0
         count = await self.vectorstore.aadd_documents(documents)
+        self.retriever.index_documents(documents)
         self._save_kb_meta(count, is_incremental=True)
         return count
 
@@ -87,37 +105,47 @@ class KnowledgeBase:
         texts: List[str],
         metadatas: Optional[List[Dict[str, Any]]] = None,
     ) -> int:
-        return self.vectorstore.add_texts(texts, metadatas)
+        documents = []
+        for i, text in enumerate(texts):
+            metadata = metadatas[i] if metadatas and i < len(metadatas) else {}
+            documents.append(Document(content=text, metadata=metadata))
+        count = self.vectorstore.add_documents(documents)
+        self.retriever.index_documents(documents)
+        return count
 
-    def search(self, query: str, k: int = 5) -> List[RetrievalResult]:
-        logger.info(f"[KB:{self.name}] search: query='{query[:50]}...', k={k}")
-        results_with_scores = self.vectorstore.similarity_search_with_score(query, k)
-        logger.info(f"[KB:{self.name}] search results: count={len(results_with_scores)}")
-        for i, (doc, score) in enumerate(results_with_scores):
-            logger.info(f"[KB:{self.name}]   result[{i}]: score={score:.4f}, source={doc.metadata.get('source', 'unknown')[:30]}, content={doc.content[:50]}...")
-        return [
-            RetrievalResult(
-                content=doc.content,
-                source=doc.metadata.get("source", "unknown"),
-                score=score,
-                metadata=doc.metadata,
-            )
-            for doc, score in results_with_scores
-        ]
-
-    async def asearch(self, query: str, k: int = 5) -> List[RetrievalResult]:
-        results_with_scores = await self.vectorstore.asimilarity_search_with_score(
-            query, k
+    def search(
+        self, 
+        query: str, 
+        k: int = 5, 
+        mode: SearchMode = SearchMode.HYBRID,
+        fusion_method: FusionMethod = FusionMethod.RRF,
+    ) -> List[RetrievalResult]:
+        logger.info(f"[KB:{self.name}] search: query='{query[:50]}...', k={k}, mode={mode}")
+        results = self.retriever.retrieve(
+            query, 
+            mode=mode, 
+            k=k, 
+            fusion_method=fusion_method
         )
-        return [
-            RetrievalResult(
-                content=doc.content,
-                source=doc.metadata.get("source", "unknown"),
-                score=score,
-                metadata=doc.metadata,
-            )
-            for doc, score in results_with_scores
-        ]
+        logger.info(f"[KB:{self.name}] search results: count={len(results)}")
+        for i, r in enumerate(results):
+            logger.info(f"[KB:{self.name}]   result[{i}]: score={r.score:.4f}, source={r.source[:30]}, content={r.content[:50]}...")
+        return results
+
+    async def asearch(
+        self, 
+        query: str, 
+        k: int = 5, 
+        mode: SearchMode = SearchMode.HYBRID,
+        fusion_method: FusionMethod = FusionMethod.RRF,
+    ) -> List[RetrievalResult]:
+        results = await self.retriever.aretrieve(
+            query, 
+            mode=mode, 
+            k=k, 
+            fusion_method=fusion_method
+        )
+        return results
 
     def get_context(self, query: str, k: int = 5, max_length: int = 3000) -> str:
         logger.info(f"[KB:{self.name}] get_context: query='{query[:50]}...', k={k}, max_length={max_length}")
