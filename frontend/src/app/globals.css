@@ -16,6 +16,9 @@
     --accent-color: #10a37f;
     --accent-hover: #0d8c6d;
     --accent-soft: rgba(16, 163, 127, 0.1);
+    --companion-color: #ec4899;
+    --companion-hover: #db2777;
+    --companion-soft: rgba(236, 72, 153, 0.1);
     --error-color: #ef4444;
     --error-soft: rgba(239, 68, 68, 0.1);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);

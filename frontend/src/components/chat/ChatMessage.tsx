@@ -15,6 +15,7 @@ export function ChatMessage({
   retrievals,
   thinkingSteps,
   timestamp,
+  agentMode = "assistant",
 }: {
   role: "user" | "assistant";
   content: string;
@@ -22,9 +23,14 @@ export function ChatMessage({
   retrievals: RetrievalResult[];
   thinkingSteps: ThinkingStep[];
   timestamp: number;
+  agentMode?: "assistant" | "companion";
 }) {
   const isUser = role === "user";
+  const isCompanion = agentMode === "companion";
   const formattedTime = formatTime(timestamp);
+  const accentColor = isCompanion ? "#ec4899" : "#1a1a1a";
+  const avatarBg = isCompanion ? "#ec4899" : "#1a1a1a";
+  const aiName = isCompanion ? "小暖" : "MiniClaw AI";
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -40,7 +46,7 @@ export function ChatMessage({
             alignItems: "center",
             justifyContent: "center",
             borderRadius: 10,
-            backgroundColor: isUser ? "#10b981" : "#1a1a1a",
+            backgroundColor: isUser ? "#10b981" : avatarBg,
             color: "#ffffff",
             fontSize: 13,
             fontWeight: 600,
@@ -51,6 +57,10 @@ export function ChatMessage({
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <circle cx="12" cy="7" r="4" />
             </svg>
+          ) : isCompanion ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
           ) : (
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>AI</span>
           )}
@@ -60,11 +70,11 @@ export function ChatMessage({
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 600, color: "#1a1a1a" }}>
-              {isUser ? "用户" : "MiniClaw AI"}
+              {isUser ? "用户" : aiName}
             </span>
             {!isUser && (
-              <span style={{ fontSize: 11, color: "#10b981", fontWeight: 500, backgroundColor: "rgba(16, 185, 129, 0.1)", padding: "1px 6px", borderRadius: 4 }}>
-                Agent
+              <span style={{ fontSize: 11, color: accentColor, fontWeight: 500, backgroundColor: isCompanion ? "rgba(236, 72, 153, 0.1)" : "rgba(16, 185, 129, 0.1)", padding: "1px 6px", borderRadius: 4 }}>
+                {isCompanion ? "Companion" : "Agent"}
               </span>
             )}
           </div>

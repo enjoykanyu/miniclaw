@@ -1,6 +1,15 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
 
 import {
   createSession,
@@ -18,9 +27,11 @@ import {
   type SessionSummary,
   type ThinkingStep,
   type ToolCall
-} from "@/lib/api";
+} from "./api";
 
-type Message = {
+export type AgentMode = "assistant" | "companion";
+
+export type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
@@ -30,7 +41,32 @@ type Message = {
   timestamp: number;
 };
 
-export type AgentMode = "assistant" | "companion";
+const FIXED_FILES = [
+  "config/prompts/router.yaml",
+  "config/agents.yaml",
+  "config/skills.yaml",
+];
+
+function makeId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function formatTime(ts: number) {
+  const d = new Date(ts);
+  return d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function toUiMessages(raw: Array<{ role: string; content: string }>): Message[] {
+  return raw.map((m) => ({
+    id: makeId(),
+    role: m.role as "user" | "assistant",
+    content: m.content,
+    toolCalls: [],
+    retrievals: [],
+    thinkingSteps: [],
+    timestamp: Date.now(),
+  }));
+}
 
 type AppStore = {
   sessions: SessionSummary[];
@@ -67,52 +103,53 @@ type AppStore = {
   setAgentMode: (mode: AgentMode) => void;
 };
 
-const FIXED_FILES = [
-  "config/prompts/router.yaml",
-  "config/prompts/task.yaml",
-  "config/prompts/data.yaml",
-  "config/prompts/health.yaml",
-  "config/prompts/info.yaml",
-  "config/prompts/learning.yaml"
-];
-
 const StoreContext = createContext<AppStore | null>(null);
 
-function makeId() {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function toUiMessages(history: Awaited<ReturnType<typeof getSessionHistory>>["messages"]) {
-  return history.map((message) => ({
-    id: makeId(),
-    role: message.role,
-    content: message.content ?? "",
-    toolCalls: message.tool_calls ?? [],
-    retrievals: [],
-    thinkingSteps: [],
-    timestamp: message.timestamp ? new Date(message.timestamp).getTime() : Date.now()
-  }));
-}
-
 export function AppProvider({ children }: { children: ReactNode }) {
+  // === 全局状态 ===
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
   const [ragMode, setRagModeState] = useState(false);
   const [forceThink, setForceThink] = useState(false);
   const [forceSearch, setForceSearch] = useState(false);
   const [selectedKbs, setSelectedKbs] = useState<string[]>([]);
   const [kbRetrievalMode, setKbRetrievalModeState] = useState<"intent" | "force">("intent");
   const [skills, setSkills] = useState<Array<{ name: string; description: string; path: string }>>([]);
-  const [inspectorPath, setInspectorPath] = useState(
-    "config/prompts/router.yaml"
-  );
+  const [inspectorPath, setInspectorPath] = useState("config/prompts/router.yaml");
   const [inspectorContent, setInspectorContent] = useState("");
   const [inspectorDirty, setInspectorDirty] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(308);
   const [tokenStats, setTokenStats] = useState<{ total_tokens: number } | null>(null);
   const [agentMode, setAgentModeState] = useState<AgentMode>("assistant");
+  const [isStreaming, setIsStreaming] = useState(false);
+
+  // === 个人助理模式独立状态 ===
+  const [assistantSessionId, setAssistantSessionId] = useState<string | null>(null);
+  const [assistantMessages, setAssistantMessages] = useState<Message[]>([]);
+
+  // === 情感陪伴模式独立状态 ===
+  const [companionSessionId, setCompanionSessionId] = useState<string | null>(null);
+  const [companionMessages, setCompanionMessages] = useState<Message[]>([]);
+
+  // === 根据当前模式派生当前显示的 session 和 messages ===
+  const isCompanion = agentMode === "companion";
+  const currentSessionId = isCompanion ? companionSessionId : assistantSessionId;
+  const messages = isCompanion ? companionMessages : assistantMessages;
+
+  const setCurrentSessionId = useCallback((id: string | null) => {
+    if (isCompanion) {
+      setCompanionSessionId(id);
+    } else {
+      setAssistantSessionId(id);
+    }
+  }, [isCompanion]);
+
+  const setCurrentMessages = useCallback((updater: React.SetStateAction<Message[]>) => {
+    if (isCompanion) {
+      setCompanionMessages(updater);
+    } else {
+      setAssistantMessages(updater);
+    }
+  }, [isCompanion]);
 
   const editableFiles = useMemo(
     () => [...FIXED_FILES, ...skills.map((skill) => skill.path)],
@@ -129,7 +166,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function refreshSessionDetails(sessionId: string) {
     const history = await getSessionHistory(sessionId);
-    setMessages(toUiMessages(history.messages));
+    setCurrentMessages(toUiMessages(history.messages));
     setTokenStats({ total_tokens: history.messages.length * 100 });
   }
 
@@ -137,7 +174,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const created = await createSession();
     await refreshSessions();
     setCurrentSessionId(created.id);
-    setMessages([]);
+    setCurrentMessages([]);
     setTokenStats(null);
   }
 
@@ -150,7 +187,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (currentSessionId) {
       return currentSessionId;
     }
-
     const created = await createSession();
     setCurrentSessionId(created.id);
     await refreshSessions();
@@ -182,13 +218,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       timestamp: Date.now()
     };
 
-    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    setCurrentMessages((prev) => [...prev, userMessage, assistantMessage]);
     setIsStreaming(true);
 
     let activeAssistantId = assistantMessage.id;
 
     const patchAssistant = (updater: (message: Message) => Message) => {
-      setMessages((prev) =>
+      setCurrentMessages((prev) =>
         prev.map((message) => (message.id === activeAssistantId ? updater(message) : message))
       );
     };
@@ -199,7 +235,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         {
           onEvent(event, data) {
             console.log("[SSE event]", event, data);
-            // 思考过程事件
+
             if (event === "thinking") {
               const step = String(data.step ?? "");
               const status = String(data.status ?? "start") as "start" | "end" | "thinking";
@@ -212,7 +248,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 if (existingIndex >= 0) {
                   const updated = [...msg.thinkingSteps];
                   const existing = updated[existingIndex];
-                  // 如果是实时思考内容，累积到 thinkingContent
                   if (status === "thinking" && isThinkingContent) {
                     updated[existingIndex] = {
                       ...existing,
@@ -220,7 +255,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
                       thinkingContent: (existing.thinkingContent || "") + message
                     };
                   } else if (status === "end") {
-                    // 节点结束时，保留 thinkingContent，同时更新 status 和 message
                     updated[existingIndex] = {
                       ...existing,
                       status: "end",
@@ -231,7 +265,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   }
                   return { ...msg, thinkingSteps: updated };
                 }
-                // 新建 step
                 const newStep: ThinkingStep = status === "thinking" && isThinkingContent
                   ? { step, status: "thinking", message, thinkingContent: message }
                   : { step, status, message };
@@ -246,15 +279,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (event === "retrieval") {
               patchAssistant((message) => ({
                 ...message,
-                retrievals: (data.results as RetrievalResult[]) ?? []
+                retrievals: [
+                  ...message.retrievals,
+                  {
+                    source: String(data.source ?? ""),
+                    text: String(data.content ?? ""),
+                    score: Number(data.score ?? 0),
+                  },
+                ],
               }));
               return;
             }
 
             if (event === "token") {
+              const token = String(data.token ?? "");
               patchAssistant((message) => ({
                 ...message,
-                content: `${message.content}${String(data.content ?? "")}`
+                content: message.content + token,
               }));
               return;
             }
@@ -265,11 +306,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 toolCalls: [
                   ...message.toolCalls,
                   {
-                    tool: String(data.tool ?? "tool"),
+                    tool: String(data.name ?? ""),
                     input: String(data.input ?? ""),
-                    output: ""
-                  }
-                ]
+                    output: "",
+                  },
+                ],
               }));
               return;
             }
@@ -281,10 +322,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     ? { ...toolCall, output: String(data.output ?? "") }
                     : toolCall
                 );
-                return {
-                  ...message,
-                  toolCalls: updatedToolCalls
-                };
+                return { ...message, toolCalls: updatedToolCalls };
               });
               return;
             }
@@ -300,19 +338,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 timestamp: Date.now()
               };
               activeAssistantId = nextAssistant.id;
-              setMessages((prev) => [...prev, nextAssistant]);
+              setCurrentMessages((prev) => [...prev, nextAssistant]);
               return;
             }
 
             if (event === "done") {
               const finalContent = String(data.content ?? "");
               patchAssistant((message) =>
-                message.content
-                  ? message
-                  : {
-                      ...message,
-                      content: finalContent
-                    }
+                message.content ? message : { ...message, content: finalContent }
               );
               return;
             }
@@ -325,8 +358,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (event === "error") {
               patchAssistant((message) => ({
                 ...message,
-                content:
-                  message.content || `请求失败: ${String(data.error ?? "unknown error")}`
+                content: message.content || `请求失败: ${String(data.error ?? "unknown error")}`
               }));
             }
           }
@@ -336,7 +368,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setIsStreaming(false);
       await refreshSessions();
       let thinkingStepsBackup = new Map<string, ThinkingStep[]>();
-      setMessages((prev) => {
+      setCurrentMessages((prev) => {
         const backup = new Map<string, ThinkingStep[]>();
         for (const msg of prev) {
           if (msg.thinkingSteps && msg.thinkingSteps.length > 0) {
@@ -348,7 +380,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       await refreshSessionDetails(sessionId);
       if (thinkingStepsBackup.size > 0) {
-        setMessages((prev) =>
+        setCurrentMessages((prev) =>
           prev.map((msg) => {
             const saved = thinkingStepsBackup.get(msg.content);
             if (saved && saved.length > 0 && (!msg.thinkingSteps || msg.thinkingSteps.length === 0)) {
@@ -409,7 +441,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await refreshSessionDetails(nextSessions[0].id);
       } else {
         setCurrentSessionId(null);
-        setMessages([]);
+        setCurrentMessages([]);
         setTokenStats(null);
       }
     }
@@ -462,6 +494,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setInspectorContent("# 暂无内容");
       }
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function setAgentMode(mode: AgentMode) {
