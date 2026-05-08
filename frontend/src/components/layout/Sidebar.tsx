@@ -96,7 +96,7 @@ export function Sidebar() {
             }}
           >
             <button
-              onClick={() => setAgentMode("assistant")}
+              onClick={() => void setAgentMode("assistant")}
               style={{
                 flex: 1,
                 display: "flex",
@@ -120,7 +120,7 @@ export function Sidebar() {
               个人助理
             </button>
             <button
-              onClick={() => setAgentMode("companion")}
+              onClick={() => void setAgentMode("companion")}
               style={{
                 flex: 1,
                 display: "flex",

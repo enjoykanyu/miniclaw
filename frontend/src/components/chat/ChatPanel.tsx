@@ -5,17 +5,17 @@ import { useEffect, useRef } from "react";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { PixelPet } from "@/components/pet/PixelPet";
-import { usePetMood } from "@/components/pet/usePetMood";
+import { usePetAction } from "@/components/pet/usePetMood";
 import { useAppStore } from "@/lib/store";
 
 export function ChatPanel() {
-  const { messages, sendMessage, isStreaming, forceThink, forceSearch, toggleForceThink, toggleForceSearch, selectedKbs, kbRetrievalMode, toggleKbSelection, setKbRetrievalMode, agentMode } = useAppStore();
+  const { messages, sendMessage, isStreaming, forceThink, forceSearch, toggleForceThink, toggleForceSearch, selectedKbs, kbRetrievalMode, toggleKbSelection, setKbRetrievalMode, agentMode, petCharacter, setPetCharacter } = useAppStore();
   const endRef = useRef<HTMLDivElement | null>(null);
   const isCompanion = agentMode === "companion";
   const accentColor = isCompanion ? "#ec4899" : "#10a37f";
   const accentSoft = isCompanion ? "rgba(236, 72, 153, 0.1)" : "rgba(16, 163, 127, 0.1)";
 
-  const petMood = usePetMood(messages, isStreaming);
+  const petAction = usePetAction(messages, isStreaming);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -30,7 +30,13 @@ export function ChatPanel() {
               {/* 情感陪伴模式显示像素宠物 */}
               {isCompanion && (
                 <div style={{ marginBottom: 16 }}>
-                  <PixelPet mood={petMood} size={140} />
+                  <PixelPet
+                    character={petCharacter}
+                    action={petAction}
+                    size={140}
+                    showSelector
+                    onCharacterChange={setPetCharacter}
+                  />
                 </div>
               )}
               <div
@@ -72,7 +78,13 @@ export function ChatPanel() {
           {/* 有消息时，情感陪伴模式在顶部显示宠物 */}
           {isCompanion && messages.length > 0 && (
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 16, paddingTop: 8 }}>
-              <PixelPet mood={petMood} size={100} />
+              <PixelPet
+                character={petCharacter}
+                action={petAction}
+                size={100}
+                showSelector
+                onCharacterChange={setPetCharacter}
+              />
             </div>
           )}
 

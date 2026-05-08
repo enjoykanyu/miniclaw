@@ -86,6 +86,7 @@ type AppStore = {
   sidebarWidth: number;
   tokenStats: { total_tokens: number } | null;
   agentMode: AgentMode;
+  petCharacter: "pikachu" | "doraemon" | "armorhero";
   createNewSession: () => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;
   sendMessage: (value: string) => Promise<void>;
@@ -100,7 +101,8 @@ type AppStore = {
   updateInspectorContent: (value: string) => void;
   saveInspector: () => Promise<void>;
   setSidebarWidth: (width: number) => void;
-  setAgentMode: (mode: AgentMode) => void;
+  setAgentMode: (mode: AgentMode) => Promise<void>;
+  setPetCharacter: (character: "pikachu" | "doraemon" | "armorhero") => void;
 };
 
 const StoreContext = createContext<AppStore | null>(null);
@@ -121,6 +123,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [tokenStats, setTokenStats] = useState<{ total_tokens: number } | null>(null);
   const [agentMode, setAgentModeState] = useState<AgentMode>("assistant");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [petCharacter, setPetCharacter] = useState<"pikachu" | "doraemon" | "armorhero">("pikachu");
 
   // === 个人助理模式独立状态 ===
   const [assistantSessionId, setAssistantSessionId] = useState<string | null>(null);
@@ -130,26 +133,51 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [companionSessionId, setCompanionSessionId] = useState<string | null>(null);
   const [companionMessages, setCompanionMessages] = useState<Message[]>([]);
 
+  // === 使用 ref 确保 callback 总是获取最新值 ===
+  const agentModeRef = useRef(agentMode);
+  const assistantSessionIdRef = useRef(assistantSessionId);
+  const companionSessionIdRef = useRef(companionSessionId);
+  const isStreamingRef = useRef(isStreaming);
+  const forceThinkRef = useRef(forceThink);
+  const forceSearchRef = useRef(forceSearch);
+  const selectedKbsRef = useRef(selectedKbs);
+  const kbRetrievalModeRef = useRef(kbRetrievalMode);
+
+  useEffect(() => { agentModeRef.current = agentMode; }, [agentMode]);
+  useEffect(() => { assistantSessionIdRef.current = assistantSessionId; }, [assistantSessionId]);
+  useEffect(() => { companionSessionIdRef.current = companionSessionId; }, [companionSessionId]);
+  useEffect(() => { isStreamingRef.current = isStreaming; }, [isStreaming]);
+  useEffect(() => { forceThinkRef.current = forceThink; }, [forceThink]);
+  useEffect(() => { forceSearchRef.current = forceSearch; }, [forceSearch]);
+  useEffect(() => { selectedKbsRef.current = selectedKbs; }, [selectedKbs]);
+  useEffect(() => { kbRetrievalModeRef.current = kbRetrievalMode; }, [kbRetrievalMode]);
+
   // === 根据当前模式派生当前显示的 session 和 messages ===
   const isCompanion = agentMode === "companion";
   const currentSessionId = isCompanion ? companionSessionId : assistantSessionId;
   const messages = isCompanion ? companionMessages : assistantMessages;
 
   const setCurrentSessionId = useCallback((id: string | null) => {
-    if (isCompanion) {
+    if (agentModeRef.current === "companion") {
       setCompanionSessionId(id);
     } else {
       setAssistantSessionId(id);
     }
-  }, [isCompanion]);
+  }, []);
 
   const setCurrentMessages = useCallback((updater: React.SetStateAction<Message[]>) => {
-    if (isCompanion) {
+    if (agentModeRef.current === "companion") {
       setCompanionMessages(updater);
     } else {
       setAssistantMessages(updater);
     }
-  }, [isCompanion]);
+  }, []);
+
+  const getCurrentSessionId = useCallback(() => {
+    return agentModeRef.current === "companion"
+      ? companionSessionIdRef.current
+      : assistantSessionIdRef.current;
+  }, []);
 
   const editableFiles = useMemo(
     () => [...FIXED_FILES, ...skills.map((skill) => skill.path)],
@@ -184,8 +212,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   async function ensureSession() {
-    if (currentSessionId) {
-      return currentSessionId;
+    const sid = getCurrentSessionId();
+    if (sid) {
+      return sid;
     }
     const created = await createSession();
     setCurrentSessionId(created.id);
@@ -194,7 +223,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   async function sendMessage(value: string) {
-    if (!value.trim() || isStreaming) {
+    if (!value.trim() || isStreamingRef.current) {
       return;
     }
 
@@ -231,7 +260,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       await streamChat(
-        { message: value.trim(), session_id: sessionId, force_think: forceThink, force_search: forceSearch, selected_kbs: selectedKbs, kb_retrieval_mode: kbRetrievalMode, agent_mode: agentMode },
+        {
+          message: value.trim(),
+          session_id: sessionId,
+          force_think: forceThinkRef.current,
+          force_search: forceSearchRef.current,
+          selected_kbs: selectedKbsRef.current,
+          kb_retrieval_mode: kbRetrievalModeRef.current,
+          agent_mode: agentModeRef.current
+        },
         {
           onEvent(event, data) {
             console.log("[SSE event]", event, data);
@@ -478,11 +515,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setSkills(initialSkills);
 
       if (initialSessions.length) {
-        setCurrentSessionId(initialSessions[0].id);
+        // 为assistant模式设置第一个session
+        setAssistantSessionId(initialSessions[0].id);
+        // 为companion模式也设置（可以是同一个或创建新的）
+        if (initialSessions.length > 1) {
+          setCompanionSessionId(initialSessions[1].id);
+        }
+        // 加载当前模式的对话详情
         await refreshSessionDetails(initialSessions[0].id);
       } else {
+        // 没有session时，为当前模式创建一个
         const created = await createSession();
-        setCurrentSessionId(created.id);
+        setAssistantSessionId(created.id);
         setSessions([created]);
       }
 
@@ -497,8 +541,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function setAgentMode(mode: AgentMode) {
+  async function setAgentMode(mode: AgentMode) {
     setAgentModeState(mode);
+    // 使用setTimeout确保状态更新后再检查
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // 切换模式后，确保新模式有 session
+    if (mode === "companion") {
+      if (!companionSessionIdRef.current) {
+        const created = await createSession();
+        setCompanionSessionId(created.id);
+        await refreshSessions();
+      }
+    } else {
+      if (!assistantSessionIdRef.current) {
+        const created = await createSession();
+        setAssistantSessionId(created.id);
+        await refreshSessions();
+      }
+    }
   }
 
   const value: AppStore = {
@@ -519,6 +580,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sidebarWidth,
     tokenStats,
     agentMode,
+    petCharacter,
     createNewSession,
     selectSession,
     sendMessage,
@@ -533,7 +595,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateInspectorContent,
     saveInspector,
     setSidebarWidth,
-    setAgentMode
+    setAgentMode,
+    setPetCharacter
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
