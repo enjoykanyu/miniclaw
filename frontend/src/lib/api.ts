@@ -51,20 +51,29 @@ function getApiBase() {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getApiBase()}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {})
+  try {
+    const response = await fetch(`${getApiBase()}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {})
+      }
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Request failed: ${response.status}`);
     }
-  });
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    return (await response.json()) as T;
+  } catch (error) {
+    // 网络错误（如后端未启动）时返回默认值，避免前端崩溃
+    if (error instanceof TypeError && error.message.includes("fetch")) {
+      console.warn(`[API] Backend unavailable, returning default for ${path}`);
+      return {} as T;
+    }
+    throw error;
   }
-
-  return (await response.json()) as T;
 }
 
 export async function listSessions() {

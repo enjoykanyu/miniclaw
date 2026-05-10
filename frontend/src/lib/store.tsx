@@ -504,36 +504,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void (async () => {
-      const [initialSessions, rag, initialSkills] = await Promise.all([
-        listSessions(),
-        getRagMode(),
-        listSkills()
-      ]);
+      try {
+        const [initialSessions, rag, initialSkills] = await Promise.all([
+          listSessions(),
+          getRagMode(),
+          listSkills()
+        ]);
 
-      setSessions(initialSessions);
-      setRagModeState(rag.enabled);
-      setSkills(initialSkills);
+        // 处理后端未启动的情况（返回空对象）
+        const sessions = Array.isArray(initialSessions) ? initialSessions : [];
+        const ragEnabled = rag && typeof rag.enabled === "boolean" ? rag.enabled : false;
+        const skills = Array.isArray(initialSkills) ? initialSkills : [];
 
-      if (initialSessions.length) {
-        // 为assistant模式设置第一个session
-        setAssistantSessionId(initialSessions[0].id);
-        // 为companion模式也设置（可以是同一个或创建新的）
-        if (initialSessions.length > 1) {
-          setCompanionSessionId(initialSessions[1].id);
+        setSessions(sessions);
+        setRagModeState(ragEnabled);
+        setSkills(skills);
+
+        if (sessions.length > 0) {
+          // 为assistant模式设置第一个session
+          setAssistantSessionId(sessions[0].id);
+          // 为companion模式也设置（可以是同一个或创建新的）
+          if (sessions.length > 1) {
+            setCompanionSessionId(sessions[1].id);
+          }
+          // 加载当前模式的对话详情
+          await refreshSessionDetails(sessions[0].id);
         }
-        // 加载当前模式的对话详情
-        await refreshSessionDetails(initialSessions[0].id);
-      } else {
-        // 没有session时，为当前模式创建一个
-        const created = await createSession();
-        setAssistantSessionId(created.id);
-        setSessions([created]);
+        // 如果后端未启动，不自动创建session，避免更多报错
+      } catch (error) {
+        console.warn("[Store] Failed to initialize from backend:", error);
+        // 使用默认空状态，不报错
+        setSessions([]);
+        setRagModeState(false);
+        setSkills([]);
       }
 
       try {
         const file = await loadFile("config/prompts/router.yaml");
-        setInspectorPath(file.path);
-        setInspectorContent(file.content);
+        if (file && file.content) {
+          setInspectorPath(file.path);
+          setInspectorContent(file.content);
+        }
       } catch {
         setInspectorContent("# 暂无内容");
       }
