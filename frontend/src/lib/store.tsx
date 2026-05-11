@@ -185,7 +185,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   async function refreshSessions() {
-    setSessions(await listSessions());
+    const data = await listSessions();
+    setSessions(Array.isArray(data) ? data : []);
   }
 
   async function refreshSkills() {
