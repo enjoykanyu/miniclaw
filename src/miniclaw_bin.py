@@ -23,7 +23,7 @@ def ensure_supported_python_version() -> None:
     )
     sys.exit(1)
 
-HELP_TEXT = """Usage: openclaw [command] [options]
+HELP_TEXT = """Usage: miniclaw [command] [options]
 
 Commands:
   gateway     Gateway management
@@ -35,7 +35,7 @@ Options:
   --version   Show version
 """
 
-VERSION_TEXT = "openclaw 0.1.0\n"
+VERSION_TEXT = "miniclaw 0.1.0\n"
 
 def try_output_help(argv: list[str]) -> bool:
     if "--help" in argv or "-h" in argv:
@@ -56,9 +56,10 @@ def main() -> None:
         return
     if try_output_version(argv):
         return
-    import asyncio
-    from entry import run_entry
-    asyncio.run(run_entry(argv))
+    # 🔗 连接点：下一阶段将接入 entry.py
+    # from openclaw.entry import run_entry
+    # asyncio.run(run_entry(argv))
+    print("[openclaw] 守门人校验通过，等待 entry.py 接入...")
 
 if __name__ == "__main__":
     main()
