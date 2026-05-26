@@ -56,10 +56,10 @@ def main() -> None:
         return
     if try_output_version(argv):
         return
-    # 🔗 连接点：下一阶段将接入 entry.py
-    # from openclaw.entry import run_entry
-    # asyncio.run(run_entry(argv))
-    print("[miniclaw] 守门人校验通过，等待 entry.py 接入...")
+    import asyncio
+    from entry import run_entry
+    asyncio.run(run_entry(argv))
+    print("[miniclaw] 守门人校验通过，已调用entry.py")
 
 if __name__ == "__main__":
     main()
