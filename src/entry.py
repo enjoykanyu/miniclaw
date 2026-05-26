@@ -44,8 +44,9 @@ async def run_main_or_root_help(argv: list[str]) -> None:
         return
     # 🔗 连接点：下一阶段将接入 run_main.py
     # mod = importlib.import_module(".cli.run_main", __package__)
-    # await mod.run_cli(argv)
-    print(f"[entry] 分流完成，argv={argv}，等待 run_main.py 接入...")
+    from cli.run_main import run_cli
+    await run_cli(argv)
+    # print(f"[entry] 分流完成，argv={argv}，等待 run_main.py 接入...")
 
 def _try_handle_root_help_fast_path(argv: list[str]) -> bool:
     if len(argv) <= 1 or argv[1] in ("--help", "-h"):

@@ -59,7 +59,7 @@ def main() -> None:
     # 🔗 连接点：下一阶段将接入 entry.py
     # from openclaw.entry import run_entry
     # asyncio.run(run_entry(argv))
-    print("[openclaw] 守门人校验通过，等待 entry.py 接入...")
+    print("[miniclaw] 守门人校验通过，等待 entry.py 接入...")
 
 if __name__ == "__main__":
     main()
