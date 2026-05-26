@@ -22,7 +22,7 @@ async def load_server_impl():
     before = time.perf_counter()
     try:
         _server_impl = importlib.import_module(
-            ".gateway.server_impl", __package__
+            "gateway.server_impl"
         )
         return _server_impl
     finally:

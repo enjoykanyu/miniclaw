@@ -55,7 +55,11 @@ async def try_run_gateway_run_fast_path(
     @click.option("--bind", default="loopback", help="Bind mode")
     def run(port: int, bind: str):
         """Run the WebSocket Gateway (foreground)"""
-        # 🔗 连接点：下一阶段将接入 server.py
+        import asyncio
+        import nest_asyncio
+        from gateway.server import start_gateway_server
+        nest_asyncio.apply()
+        asyncio.run(start_gateway_server(port=port))
         print(f"[run_main] Gateway 快速路径命中！port={port}")
         print(f"[run_main] 等待 server.py 接入...")
 
