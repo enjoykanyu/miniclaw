@@ -1,65 +1,48 @@
+# =============================
+# miniclaw_bin.py — Python 版 "openclaw.mjs"
+# 职责：版本守卫 + 帮助快径 + 导入入口
+# =============================
 import sys
 
-MIN_PYTHON_MAJOR = 3
-MIN_PYTHON_MINOR = 11
+MIN_PYTHON = (3, 11)
 
-def parse_python_version(version_str: str) -> tuple[int, int]:
-    parts = version_str.split(".")[:2]
-    return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+def ensure_supported_python_version():
+    if sys.version_info[:2] < MIN_PYTHON:
+        print(f"需要 Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+", file=sys.stderr)
+        sys.exit(1)
 
-def is_supported_python_version(version: tuple[int, int]) -> bool:
-    return (
-            version[0] > MIN_PYTHON_MAJOR or
-            (version[0] == MIN_PYTHON_MAJOR and version[1] >= MIN_PYTHON_MINOR)
-    )
+def is_bare_root_help_invocation(argv):
+    return len(argv) == 2 and argv[1] in ("--help", "-h")
 
-def ensure_supported_python_version() -> None:
-    current = parse_python_version(sys.version.split()[0])
-    if is_supported_python_version(current):
-        return
-    sys.stderr.write(
-        f"openclaw: Python 3.11+ is required "
-        f"(current: {sys.version})\n"
-    )
-    sys.exit(1)
+def should_defer_root_help_to_runtime_entry():
+    """有插件时延迟帮助输出 → 第2章 Phase3 实现 ↩"""
+    return False
 
-HELP_TEXT = """Usage: miniclaw [command] [options]
+def try_output_help_fast_path(argv):
+    """帮助快径：满足条件则输出预计算帮助并返回 True"""
+    if not is_bare_root_help_invocation(argv):
+        return False
+    if should_defer_root_help_to_runtime_entry():
+        return False
+    print("Usage: miniclaw [command] [options]")
+    print("  gateway run    Start the WebSocket Gateway")
+    return True
 
-Commands:
-  gateway     Gateway management
-  config      Configuration management
-  doctor      Diagnose and fix issues
-
-Options:
-  --help      Show help
-  --version   Show version
-"""
-
-VERSION_TEXT = "miniclaw 0.1.0\n"
-
-def try_output_help(argv: list[str]) -> bool:
-    if "--help" in argv or "-h" in argv:
-        sys.stdout.write(HELP_TEXT)
+def try_output_version_fast_path(argv):
+    """版本快径：对应 entry.ts 的 tryHandleRootVersionFastPath"""
+    if len(argv) == 2 and argv[1] in ("--version", "-V"):
+        print("miniclaw v0.1.0")
         return True
     return False
 
-def try_output_version(argv: list[str]) -> bool:
-    if "--version" in argv or "-v" in argv:
-        sys.stdout.write(VERSION_TEXT)
-        return True
-    return False
-
-def main() -> None:
+def main():
     ensure_supported_python_version()
     argv = sys.argv
-    if try_output_help(argv):
-        return
-    if try_output_version(argv):
-        return
+    if try_output_help_fast_path(argv): return
+    if try_output_version_fast_path(argv): return
     import asyncio
     from entry import run_entry
     asyncio.run(run_entry(argv))
-    print("[miniclaw] 守门人校验通过，已调用entry.py")
 
 if __name__ == "__main__":
     main()
