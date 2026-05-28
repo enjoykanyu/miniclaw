@@ -73,8 +73,11 @@ async def try_run_gateway_run_fast_path(
     print("[openclaw] Gateway fast path detected...", file=sys.stderr)
     policy = _resolve_startup_policy(argv)
     _enable_console_capture()
-    from src.gateway.server import start_gateway_server
-    await start_gateway_server(**policy)
+    from gateway.server import start_gateway_server
+    from gateway.server_impl import GatewayServerOptions
+    bind = policy.pop("bind", "loopback")
+    opts = GatewayServerOptions(bind=bind)
+    await start_gateway_server(port=policy.get("port", 18789), opts=opts)
     return True
 
 
