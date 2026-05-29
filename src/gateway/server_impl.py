@@ -90,3 +90,49 @@ async def start_gateway_server(
         print(f"[gateway] Closing: {reason}")
 
     return GatewayServer(close=close)
+
+
+
+from aiohttp import web
+import aiohttp
+
+async def _create_http_ws_server(runtime_cfg, auth):
+    """对应 createHttpWsServer: 用 aiohttp 替代 Node.js http/ws"""
+    app = web.Application()
+
+    # 连接总闸：WebSocket 握手认证
+    async def ws_handler(request):
+        ws = web.WebSocketResponse()
+
+        # 连接总闸：握手认证
+        token = request.query.get("token") or \
+                request.headers.get("Authorization", "").replace("Bearer ", "")
+        # TODO 未实现 握手认证
+        if not authenticate_handshake(token, auth):
+            return web.Response(status=401, text="Unauthorized")
+
+        await ws.prepare(request)
+
+        async for msg in ws:
+            if msg.type == aiohttp.WSMsgType.TEXT:
+                # 带宽总闸 TODO未实现
+                if not validate_payload_size(msg.data):
+                    await ws.close(code=4000,
+                                   message="Payload too large")
+                    break
+
+                # 协议层：帧校验 TOTO未实现
+                frame = _parse_and_validate_frame(msg.data)
+                if not frame["valid"]:
+                    await ws.close(code=4000,
+                                   message="Invalid frame")
+                    break
+
+                # 方法层：权限校验 + 分发 TODO 未实现
+                result = await _dispatch_method(frame, auth)
+                await ws.send_json(result)
+
+        return ws
+
+    app.router.add_get("/ws", ws_handler)
+    return app
