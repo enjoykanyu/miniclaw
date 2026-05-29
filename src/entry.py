@@ -3,8 +3,8 @@ import os, sys, subprocess
 VERSION = "0.1.0"
 
 def init_process_env():
-    """标记当前进程为 openclaw 执行实例"""
-    os.environ.setdefault("OPENCLAW_EXEC", "1")
+    """标记当前进程为 miniclaw 执行实例"""
+    os.environ.setdefault("MINICLAW_EXEC", "1")
     os.environ.setdefault("NO_COLOR", "0")
 
 def _build_cli_respawn_plan():

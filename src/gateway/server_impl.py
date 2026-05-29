@@ -45,26 +45,34 @@ async def start_gateway_server(
         opts = GatewayServerOptions()
 
     os.environ["OPENCLAW_GATEWAY_PORT"] = str(port)
-    startup_trace = StartupTrace()
+    trace = StartupTrace()
 
     # Phase 1: 加载配置快照
     print(f"[gateway] Phase 1: 配置快照 port={port}")
+    cfg = await trace.measure("config-snapshot",lambda: _load_config_snapshot())
     # 🔗 连接点：后续实现 config_snapshot 后接入
 
     # Phase 2: 认证配置准备
     print("[gateway] Phase 2: 认证配置准备")
+    from src.gateway.startup_auth import ensure_gateway_startup_auth
+    auth_result = await trace.measure("startup-auth",lambda: ensure_gateway_startup_auth(cfg))
+    cfg = auth_result.cfg
+    auth = auth_result.auth
     # 🔗 连接点：后续实现 startup_auth 后接入
 
     # Phase 3: 插件引导
     print("[gateway] Phase 3: 插件引导")
+    await trace.measure("plugin-bootstrap",lambda: _auto_enable_plugins(cfg))
     # 🔗 连接点：后续实现 plugin_bootstrap 后接入
 
     # Phase 4: 运行时配置解析
     print("[gateway] Phase 4: 运行时配置解析")
+    runtime_cfg = await trace.measure("runtime-config",lambda: _resolve_runtime_config(cfg))
     # 🔗 连接点：后续实现 runtime_config 后接入
 
     # Phase 5: 创建 HTTP/WS 服务器（aiohttp）
     print("[gateway] Phase 5: 创建 HTTP/WS 服务器")
+    await _create_http_ws_server(runtime_cfg,auth)
     # 🔗 连接点：后续实现 aiohttp 服务器后接入
 
     # Phase 6-8: 早期运行时 + WS处理器 + 监听

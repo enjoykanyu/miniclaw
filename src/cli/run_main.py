@@ -63,6 +63,7 @@ def _resolve_startup_policy(argv):
 def _enable_console_capture():
     """启用日志捕获 → 第2章 Phase7 实现 log-capture.py ↩"""
     pass
+
 async def try_run_gateway_run_fast_path(
         argv: list[str],
         startup_trace: StartupTrace | None = None,
