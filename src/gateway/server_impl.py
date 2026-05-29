@@ -140,3 +140,28 @@ async def _create_http_ws_server(runtime_cfg, auth):
 
     app.router.add_get("/ws", ws_handler)
     return app
+
+
+import json
+from pathlib import Path
+
+async def _load_config_snapshot() -> dict:
+    """读取JSON配置文件，返回dict"""
+    config_path = Path("openclaw.json")
+    if not config_path.exists():
+        return _default_config()
+
+    raw = config_path.read_text(encoding="utf-8")
+    parsed = json.loads(raw)
+    return {**_default_config(), **parsed}
+
+def _default_config() -> dict:
+    """默认配置"""
+    return {
+        "gateway": {
+            "port": 18789,
+            "auth": {"mode": "token"},
+            "maxPayloadBytes": 1048576,
+            "logLevel": "info",
+        }
+    }
