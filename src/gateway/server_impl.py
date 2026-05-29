@@ -189,3 +189,31 @@ async def _auto_enable_plugins(cfg: dict) -> PluginRegistry:
         PluginRegistry 包含插件注册表和方法描述符
     """
     raise NotImplementedError("TODO: 后续章节实现")
+
+@dataclass
+class RuntimeConfig:
+    bind_host: str = "0.0.0.0"
+    port: int = 18789
+    auth: dict | None = None
+    tls: dict | None = None
+    cors_origins: list[str] = field(default_factory=list)
+    max_payload_bytes: int = 1048576
+    log_level: str = "info"
+
+async def _resolve_runtime_config(cfg: dict) -> RuntimeConfig:
+    """对应 resolveGatewayRuntimeConfig: 运行时配置解析
+
+    将启动配置「编译」为运行时配置：
+    1. 合并环境变量覆盖（PORT, BIND_HOST 等）
+    2. 解析 bind 地址
+    3. 解析 TLS 配置
+    4. 解析认证配置
+    5. 解析 CORS 来源
+
+    Args:
+        cfg: Phase 1-3 处理后的配置 dict
+
+    Returns:
+        RuntimeConfig dataclass，所有字段已解析
+    """
+    raise NotImplementedError("TODO: 后续章节实现")
