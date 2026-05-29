@@ -95,7 +95,11 @@ async def start_gateway_server(
 
 from aiohttp import web
 import aiohttp
-
+from src.gateway.gates import (
+    authenticate_handshake,   # 🔗 待实现
+    validate_payload_size,    # 🔗 待实现
+    authorize_gateway_method, # 🔗 待实现
+)
 async def _create_http_ws_server(runtime_cfg, auth):
     """对应 createHttpWsServer: 用 aiohttp 替代 Node.js http/ws"""
     app = web.Application()
