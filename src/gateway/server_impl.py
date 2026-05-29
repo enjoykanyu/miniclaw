@@ -165,3 +165,27 @@ def _default_config() -> dict:
             "logLevel": "info",
         }
     }
+
+from dataclasses import dataclass, field
+from typing import Any
+
+@dataclass
+class PluginRegistry:
+    plugins: dict[str, Any] = field(default_factory=dict)
+    methods: dict[str, dict] = field(default_factory=dict)
+
+async def _auto_enable_plugins(cfg: dict) -> PluginRegistry:
+    """对应 prepareGatewayPluginBootstrap: 插件引导
+
+    三步流程：
+    1. discover — 用 importlib.metadata.entry_points() 发现插件
+    2. register — 读取插件 manifest，构建注册表
+    3. extract  — 提取 Gateway 方法描述符
+
+    Args:
+        cfg: Phase 1 返回的配置 dict
+
+    Returns:
+        PluginRegistry 包含插件注册表和方法描述符
+    """
+    raise NotImplementedError("TODO: 后续章节实现")
