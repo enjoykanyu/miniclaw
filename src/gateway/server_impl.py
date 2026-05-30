@@ -3,10 +3,21 @@ import os
 import sys
 from dataclasses import dataclass
 from typing import Optional, Callable, Awaitable, Any
+from src.channel.runtime_store import ChannelRuntimeStore
 
 @dataclass
 class GatewayServer:
+    def __init__(self):
+        self._channel_store = ChannelRuntimeStore()
     close: Callable[[], Awaitable[None]]
+
+    async def start_channel(self, channel_id, account_id):
+        snap = self._channel_store.get_snapshot(channel_id, account_id)
+        snap.running = True
+        snap.connected = False
+        snap.started_at = time.monotonic()
+        # → lifecycle.start() 连接通道
+        # → snap.connected = True
 
 @dataclass
 class GatewayServerOptions:
