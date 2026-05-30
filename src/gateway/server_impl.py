@@ -238,3 +238,23 @@ def _parse_and_validate_frame(data: str) -> dict:
         或 {"valid": False, "error": "..."}
     """
     raise NotImplementedError("TODO: 后续章节实现")
+
+async def _dispatch_method(frame: dict, auth: dict) -> dict:
+    """方法层分发：
+    根据帧中的 method 字段分发到对应的 handler：
+    1. 查找方法注册表 — method_registry[frame["method"]]
+    2. 权限校验 — authorize_gateway_method()
+    3. 调用 handler — handler(frame["params"], auth)
+    4. 返回结果 — {"type": "response", "id": ..., "result": ...}
+
+    对应 OpenClaw 的方法分发器。
+    方法注册表由 Phase 8 填充。
+
+    Args:
+        frame: 已校验的帧 dict
+        auth: 用户认证信息
+
+    Returns:
+        响应 dict
+    """
+    raise NotImplementedError("TODO: 后续章节实现")
