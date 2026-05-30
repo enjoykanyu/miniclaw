@@ -66,8 +66,8 @@ class BundledChannelEntry:
         if mode == RegistrationMode.CLI_METADATA:
             return
         plugin = self.load_plugin()
-        # TODO 未实现 register_channel
-        # register_channel(plugin)
+        from channel_registry import register_channel
+        register_channel(plugin)
         if mode == RegistrationMode.DISCOVERY:
             return
         if mode != RegistrationMode.FULL:
