@@ -90,6 +90,9 @@ async def start_gateway_server(
 
     # Phase 10: 配置热重载
     print("[gateway] Phase 10: 配置热重载")
+    import asyncio
+    asyncio.create_task(
+        _watch_config_reload(config_path, runtime))
 
     print(f"[gateway] ✅ 10 阶段启动完成，监听 port={port}")
 
@@ -370,5 +373,45 @@ async def _start_post_attach_runtime(
         app: Phase 5 创建的 aiohttp Application
         runtime_cfg: 运行时配置
         early_runtime: Phase 6 返回的运行时组件
+    """
+    raise NotImplementedError("TODO: 后续章节实现")
+
+HOT_RELOADABLE_KEYS = {
+    "gateway.logLevel",
+    "gateway.maxPayloadBytes",
+    "gateway.broadcast.bufferSize",
+    "gateway.cron",
+}
+
+RESTART_REQUIRED_KEYS = {
+    "gateway.port",
+    "gateway.bind",
+    "gateway.auth",
+    "gateway.tls",
+}
+
+async def _watch_config_reload(
+        config_path: str,
+        runtime: dict,
+) -> None:
+    """对应 registerConfigWriteListener: 配置热重载
+
+    监听配置文件变更，触发热重载：
+    1. watchfiles.watch(config_path) 监听文件变更
+    2. 读取新配置 → classify_config_change 分类
+    3. hot-reloaded → apply_hot_reload 热更新
+    4. restart-required → request_graceful_restart 请求重启
+
+    为什么放在最后？
+    - 热更新需要所有运行时状态就绪
+    - 重启需要优雅关闭所有组件
+
+    Python 选型：watchfiles 替代 chokidar
+    - 基于 Rust notify crate，性能优秀
+    - 原生 async 支持：async for changes in watchfiles.watch(path)
+
+    Args:
+        config_path: 配置文件路径
+        runtime: 运行时状态 dict
     """
     raise NotImplementedError("TODO: 后续章节实现")
