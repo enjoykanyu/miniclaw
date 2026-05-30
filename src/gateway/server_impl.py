@@ -86,6 +86,7 @@ async def start_gateway_server(
     await trace.measure("gateway.handlers",lambda: _register_handlers_and_listen(app, runtime_cfg, plugin_registry, early_runtime))
     # Phase 9: 后附加运行时
     print("[gateway] Phase 9: 后附加运行时")
+    await trace.measure("runtime.post-attach",lambda: _start_post_attach_runtime(app, runtime_cfg, early_runtime))
 
     # Phase 10: 配置热重载
     print("[gateway] Phase 10: 配置热重载")
@@ -342,6 +343,32 @@ async def _register_handlers_and_listen(
         app: Phase 5 创建的 aiohttp Application
         runtime_cfg: 运行时配置
         plugin_registry: Phase 3 返回的插件注册表
+        early_runtime: Phase 6 返回的运行时组件
+    """
+    raise NotImplementedError("TODO: 后续章节实现")
+
+async def _start_post_attach_runtime(
+        app: web.Application,
+        runtime_cfg: RuntimeConfig,
+        early_runtime: dict,
+) -> None:
+    """对应 runtime.post-attach: 后附加运行时
+
+    启动后附加运行时组件：
+    1. 定时任务 — APScheduler 或 asyncio.create_task
+    2. 健康检查循环 — 周期性检查各组件状态
+    3. Sidecar 启动 — subprocess 管理
+    4. 模型目录加载 — 扫描可用模型
+
+    为什么放在最后？
+    - 定时任务需要方法注册表（Phase 8）
+    - 健康检查需要 broadcast（Phase 6）
+    - Sidecar 需要 HTTP 服务器端口（Phase 5）
+    - 模型目录需要插件注册表（Phase 3）
+
+    Args:
+        app: Phase 5 创建的 aiohttp Application
+        runtime_cfg: 运行时配置
         early_runtime: Phase 6 返回的运行时组件
     """
     raise NotImplementedError("TODO: 后续章节实现")
