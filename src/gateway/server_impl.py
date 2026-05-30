@@ -217,3 +217,24 @@ async def _resolve_runtime_config(cfg: dict) -> RuntimeConfig:
         RuntimeConfig dataclass，所有字段已解析
     """
     raise NotImplementedError("TODO: 后续章节实现")
+
+def _parse_and_validate_frame(data: str) -> dict:
+    """协议层帧校验：对应 AJV JSON Schema 校验
+
+    解析 JSON 文本并校验帧格式：
+    1. JSON 解析 — json.loads(data)
+    2. 必需字段检查 — type, method, id
+    3. 类型校验 — type 必须是 "request" | "response" | "event"
+    4. 方法名格式 — "namespace.method" 格式
+
+    对应 OpenClaw 的 AJV JSON Schema 校验。
+    Python 等价方案：jsonschema 库 或 手动校验。
+
+    Args:
+        data: WebSocket 接收到的文本消息
+
+    Returns:
+        {"valid": True, "type": ..., "method": ..., "id": ..., "params": ...}
+        或 {"valid": False, "error": "..."}
+    """
+    raise NotImplementedError("TODO: 后续章节实现")
