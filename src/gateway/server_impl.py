@@ -77,6 +77,7 @@ async def start_gateway_server(
 
     # Phase 6-8: 早期运行时 + WS处理器 + 监听
     print("[gateway] Phase 6-8: WS处理器 + 监听")
+    early_runtime = await trace.measure("runtime.early",lambda: _start_early_runtime(app, runtime_cfg))
 
     # Phase 9: 后附加运行时
     print("[gateway] Phase 9: 后附加运行时")
@@ -256,5 +257,32 @@ async def _dispatch_method(frame: dict, auth: dict) -> dict:
 
     Returns:
         响应 dict
+    """
+    raise NotImplementedError("TODO: 后续章节实现")
+
+async def _start_early_runtime(
+        app: web.Application,
+        runtime_cfg: RuntimeConfig,
+) -> dict:
+    """对应 startGatewayEarlyRuntime: 早期运行时
+
+    启动早期运行时组件：
+    1. 创建 broadcast 实例 — 事件广播器
+    2. 创建 nodeRegistry — 节点注册表
+    3. 注册本机节点
+    4. (可选) 启动 Bonjour/mDNS 服务发现
+
+    为什么在 Phase 5 之后？
+    - broadcast 和 nodeRegistry 需要 HTTP 服务器实例
+    - 注册自己需要知道实际监听地址和端口
+
+    Python 简化：跳过 Bonjour/mDNS，只保留核心组件。
+
+    Args:
+        app: Phase 5 创建的 aiohttp Application
+        runtime_cfg: 运行时配置
+
+    Returns:
+        {"broadcast": ..., "node_registry": ...}
     """
     raise NotImplementedError("TODO: 后续章节实现")
