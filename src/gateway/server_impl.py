@@ -228,17 +228,23 @@ async def _resolve_runtime_config(cfg: dict) -> RuntimeConfig:
     """
     raise NotImplementedError("TODO: 后续章节实现")
 
+_METHOD_NAME_PATTERN = __import__("re").compile(r"^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$")
+
 def _parse_and_validate_frame(data: str) -> dict:
     """协议层帧校验：对应 AJV JSON Schema 校验
 
-    解析 JSON 文本并校验帧格式：
-    1. JSON 解析 — json.loads(data)
-    2. 必需字段检查 — type, method, id
-    3. 类型校验 — type 必须是 "request" | "response" | "event"
-    4. 方法名格式 — "namespace.method" 格式
+    对应 OpenClaw 源码：
+    - protocol/schema/frames.ts → RequestFrameSchema / ResponseFrameSchema / EventFrameSchema
+    - protocol/index.ts → validateRequestFrame = lazyCompile(RequestFrameSchema)
+    - server/ws-connection/message-handler.ts → handleMessage() 中的 JSON.parse + validateRequestFrame
 
-    对应 OpenClaw 的 AJV JSON Schema 校验。
-    Python 等价方案：jsonschema 库 或 手动校验。
+    OpenClaw 用 TypeBox (AJV) 定义三种帧 Schema：
+    - RequestFrame:  { type: "req",   id: string, method: string, params?: unknown }
+    - ResponseFrame: { type: "res",   id: string, ok: boolean,   payload?: unknown, error?: ErrorShape }
+    - EventFrame:    { type: "event", event: string, payload?: unknown, seq?: int }
+
+    Python 等价方案：手动校验（避免 jsonschema 库的运行时开销）。
+    三种帧类型用 type 字段区分（对应 OpenClaw 的 discriminator: "type"）。
 
     Args:
         data: WebSocket 接收到的文本消息
@@ -247,7 +253,68 @@ def _parse_and_validate_frame(data: str) -> dict:
         {"valid": True, "type": ..., "method": ..., "id": ..., "params": ...}
         或 {"valid": False, "error": "..."}
     """
-    raise NotImplementedError("TODO: 后续章节实现")
+    try:
+        parsed = json.loads(data)
+    except (json.JSONDecodeError, TypeError):
+        return {"valid": False, "error": "invalid JSON"}
+
+    if not isinstance(parsed, dict):
+        return {"valid": False, "error": "frame must be a JSON object"}
+
+    frame_type = parsed.get("type")
+    if frame_type == "req":
+        method = parsed.get("method")
+        frame_id = parsed.get("id")
+        if not isinstance(method, str) or not method:
+            return {"valid": False, "error": "request frame missing 'method'"}
+        if not isinstance(frame_id, str) or not frame_id:
+            return {"valid": False, "error": "request frame missing 'id'"}
+        if not _METHOD_NAME_PATTERN.match(method):
+            return {"valid": False, "error": f"invalid method name format: {method}"}
+        return {
+            "valid": True,
+            "type": "req",
+            "method": method,
+            "id": frame_id,
+            "params": parsed.get("params", {}),
+        }
+    elif frame_type == "res":
+        frame_id = parsed.get("id")
+        ok = parsed.get("ok")
+        if not isinstance(frame_id, str) or not frame_id:
+            return {"valid": False, "error": "response frame missing 'id'"}
+        if not isinstance(ok, bool):
+            return {"valid": False, "error": "response frame 'ok' must be boolean"}
+        return {
+            "valid": True,
+            "type": "res",
+            "id": frame_id,
+            "ok": ok,
+            "payload": parsed.get("payload"),
+            "error": parsed.get("error"),
+        }
+    elif frame_type == "event":
+        event = parsed.get("event")
+        if not isinstance(event, str) or not event:
+            return {"valid": False, "error": "event frame missing 'event'"}
+        return {
+            "valid": True,
+            "type": "event",
+            "event": event,
+            "payload": parsed.get("payload"),
+            "seq": parsed.get("seq"),
+        }
+    else:
+        return {"valid": False, "error": f"unknown frame type: {frame_type!r}"}
+
+_METHOD_REGISTRY: dict[str, dict] = {}
+
+def register_method(name: str, handler, *, required_role: str = "user", required_scopes: list[str] | None = None):
+    _METHOD_REGISTRY[name] = {
+        "handler": handler,
+        "required_role": required_role,
+        "required_scopes": required_scopes or [],
+    }
 
 async def _dispatch_method(frame: dict, auth: dict) -> dict:
     """方法层分发：
