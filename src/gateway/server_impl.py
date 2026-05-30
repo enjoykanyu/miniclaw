@@ -81,6 +81,9 @@ async def start_gateway_server(
 
     # ★ Phase 7: 事件订阅 ★
     await trace.measure("runtime.subscriptions",lambda: _start_event_subscriptions(early_runtime))
+
+    # ★ Phase 8: 方法处理器注册 + 开始监听 ★
+    await trace.measure("gateway.handlers",lambda: _register_handlers_and_listen(app, runtime_cfg, plugin_registry, early_runtime))
     # Phase 9: 后附加运行时
     print("[gateway] Phase 9: 后附加运行时")
 
@@ -304,6 +307,41 @@ async def _start_event_subscriptions(
     而是订阅 broadcast 事件后被动响应。
 
     Args:
+        early_runtime: Phase 6 返回的运行时组件
+    """
+    raise NotImplementedError("TODO: 后续章节实现")
+
+
+async def _register_handlers_and_listen(
+        app: web.Application,
+        runtime_cfg: RuntimeConfig,
+        plugin_registry: PluginRegistry,
+        early_runtime: dict,
+) -> None:
+    """对应 gateway.handlers + startListening
+
+    两步流程：
+    1. 注册方法处理器
+       - 核心方法（agent.list, agent.create 等）
+       - 插件方法（从 PluginRegistry 提取）
+       - 合并到方法注册表 method_registry
+    2. 开始监听
+       - web.run_app(app, host=bind_host, port=port)
+
+    方法注册表模式：
+    method_registry = {
+        "agent.list": {
+            "handler": handle_agent_list,
+            "requiredRole": "user",
+            "requiredScopes": ["agent:read"],
+        },
+        ...
+    }
+
+    Args:
+        app: Phase 5 创建的 aiohttp Application
+        runtime_cfg: 运行时配置
+        plugin_registry: Phase 3 返回的插件注册表
         early_runtime: Phase 6 返回的运行时组件
     """
     raise NotImplementedError("TODO: 后续章节实现")
