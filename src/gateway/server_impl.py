@@ -62,7 +62,7 @@ async def start_gateway_server(
 
     # Phase 3: 插件引导
     print("[gateway] Phase 3: 插件引导")
-    await trace.measure("plugin-bootstrap",lambda: _auto_enable_plugins(cfg))
+    plugin_registry =await trace.measure("plugin-bootstrap",lambda: _auto_enable_plugins(cfg))
     # 🔗 连接点：后续实现 plugin_bootstrap 后接入
 
     # Phase 4: 运行时配置解析
@@ -72,7 +72,7 @@ async def start_gateway_server(
 
     # Phase 5: 创建 HTTP/WS 服务器（aiohttp）
     print("[gateway] Phase 5: 创建 HTTP/WS 服务器")
-    await _create_http_ws_server(runtime_cfg,auth)
+    app = await _create_http_ws_server(runtime_cfg,auth)
     # 🔗 连接点：后续实现 aiohttp 服务器后接入
 
     # Phase 6-8: 早期运行时 + WS处理器 + 监听
