@@ -79,6 +79,8 @@ async def start_gateway_server(
     print("[gateway] Phase 6-8: WS处理器 + 监听")
     early_runtime = await trace.measure("runtime.early",lambda: _start_early_runtime(app, runtime_cfg))
 
+    # ★ Phase 7: 事件订阅 ★
+    await trace.measure("runtime.subscriptions",lambda: _start_event_subscriptions(early_runtime))
     # Phase 9: 后附加运行时
     print("[gateway] Phase 9: 后附加运行时")
 
@@ -284,5 +286,24 @@ async def _start_early_runtime(
 
     Returns:
         {"broadcast": ..., "node_registry": ...}
+    """
+    raise NotImplementedError("TODO: 后续章节实现")
+
+async def _start_event_subscriptions(
+        early_runtime: dict,
+) -> None:
+    """对应 startGatewayEventSubscriptions: 事件订阅
+
+    注册内部事件监听器：
+    1. agent.complete — Agent 完成任务
+    2. chat.delta — 聊天流式增量
+    3. tool.invoke — 工具调用
+    4. node.status — 节点状态变更
+
+    事件驱动架构：Gateway 不主动轮询，
+    而是订阅 broadcast 事件后被动响应。
+
+    Args:
+        early_runtime: Phase 6 返回的运行时组件
     """
     raise NotImplementedError("TODO: 后续章节实现")
