@@ -317,24 +317,72 @@ def register_method(name: str, handler, *, required_role: str = "user", required
     }
 
 async def _dispatch_method(frame: dict, auth: dict) -> dict:
-    """方法层分发：
-    根据帧中的 method 字段分发到对应的 handler：
-    1. 查找方法注册表 — method_registry[frame["method"]]
-    2. 权限校验 — authorize_gateway_method()
-    3. 调用 handler — handler(frame["params"], auth)
-    4. 返回结果 — {"type": "response", "id": ..., "result": ...}
+    """方法层分发：对应 OpenClaw handleGatewayRequest
 
-    对应 OpenClaw 的方法分发器。
-    方法注册表由 Phase 8 填充。
+    对应 OpenClaw 源码：
+    - server-methods.ts → handleGatewayRequest()
+    - server-methods.ts → authorizeGatewayMethod() — role + scope 双重校验
+    - server-methods.ts → methodRegistry.getHandler(req.method) — 查找 handler
+    - server/ws-connection/message-handler.ts → handleMessage() 中的 handleGatewayRequest 调用
+
+    OpenClaw 的方法分发流程：
+    1. authorizeGatewayMethod(method, client, params) — 权限校验
+       - 解析 role（operator/node/admin）
+       - isRoleAuthorizedForMethod(role, method) — 角色是否允许调用该方法
+       - authorizeOperatorScopesForMethod(method, scopes, params) — scope 细粒度校验
+    2. methodRegistry.getHandler(method) — 查找方法注册表
+       - 找不到 → errorShape(INVALID_REQUEST, "unknown method")
+    3. handler({req, params, client, respond, context}) — 调用 handler
+    4. respond(true/false, payload, error) — 返回结果
+
+    Python 简化：
+    - 方法注册表用模块级 dict（Phase 8 填充）
+    - 权限校验调用 gates.authorize_gateway_method()
+    - 注册表为空时返回 method-not-found（预期行为）
 
     Args:
-        frame: 已校验的帧 dict
+        frame: 已校验的帧 dict（_parse_and_validate_frame 返回的 valid=True 结果）
         auth: 用户认证信息
 
     Returns:
-        响应 dict
+        响应 dict，格式：{"type": "res", "id": ..., "ok": bool, ...}
     """
-    raise NotImplementedError("TODO: 后续章节实现")
+    method = frame.get("method", "")
+    frame_id = frame.get("id", "unknown")
+
+    auth_error = authorize_gateway_method(method, auth)
+    if auth_error:
+        return {
+            "type": "res",
+            "id": frame_id,
+            "ok": False,
+            "error": auth_error,
+        }
+
+    entry = _METHOD_REGISTRY.get(method)
+    if not entry:
+        return {
+            "type": "res",
+            "id": frame_id,
+            "ok": False,
+            "error": {"code": "METHOD_NOT_FOUND", "message": f"unknown method: {method}"},
+        }
+
+    try:
+        result = await entry["handler"](frame.get("params", {}), auth)
+        return {
+            "type": "res",
+            "id": frame_id,
+            "ok": True,
+            "payload": result,
+        }
+    except Exception as exc:
+        return {
+            "type": "res",
+            "id": frame_id,
+            "ok": False,
+            "error": {"code": "INTERNAL_ERROR", "message": str(exc)},
+        }
 
 async def _start_early_runtime(
         app: web.Application,
