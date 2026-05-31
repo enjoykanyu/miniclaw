@@ -1,23 +1,23 @@
 import time
 import os
 import sys
-from dataclasses import dataclass
+import json
+import re
+import asyncio
+from dataclasses import dataclass, field
 from typing import Optional, Callable, Awaitable, Any
-from src.channel.runtime_store import ChannelRuntimeStore
+from pathlib import Path
 
-@dataclass
-class GatewayServer:
-    def __init__(self):
-        self._channel_store = ChannelRuntimeStore()
-    close: Callable[[], Awaitable[None]]
+from aiohttp import web
+import aiohttp
 
-    async def start_channel(self, channel_id, account_id):
-        snap = self._channel_store.get_snapshot(channel_id, account_id)
-        snap.running = True
-        snap.connected = False
-        snap.started_at = time.monotonic()
-        # → lifecycle.start() 连接通道
-        # → snap.connected = True
+from src.gateway.startup_auth import ensure_gateway_startup_auth
+from src.gateway.gates import (
+    authenticate_handshake,
+    validate_payload_size,
+    authorize_gateway_method,
+)
+
 
 @dataclass
 class GatewayServerOptions:
@@ -29,8 +29,8 @@ class GatewayServerOptions:
     tailscale: Optional[dict] = None
     defer_startup_sidecars: bool = False
 
+
 class StartupTrace:
-    """对应 createGatewayStartupTrace(): 启动追踪器"""
     def __init__(self):
         self._started = time.perf_counter()
 
@@ -47,127 +47,21 @@ class StartupTrace:
                     f"{elapsed:.1f}ms total={total:.1f}ms\n"
                 )
 
-async def start_gateway_server(
-        port: int = 18789,
-        opts: GatewayServerOptions | None = None,
-) -> GatewayServer:
-    """对应 startGatewayServer(): 核心启动流程"""
-    if opts is None:
-        opts = GatewayServerOptions()
 
-    os.environ["OPENCLAW_GATEWAY_PORT"] = str(port)
-    trace = StartupTrace()
+class GatewayServer:
+    def __init__(self, close: Callable[[], Awaitable[None]], runtime: dict | None = None):
+        self._close = close
+        self._runtime = runtime or {}
 
-    # Phase 1: 加载配置快照
-    print(f"[gateway] Phase 1: 配置快照 port={port}")
-    cfg = await trace.measure("config-snapshot",lambda: _load_config_snapshot())
-    # 🔗 连接点：后续实现 config_snapshot 后接入
+    async def close(self, reason: str = "shutdown") -> None:
+        await self._close(reason)
 
-    # Phase 2: 认证配置准备
-    print("[gateway] Phase 2: 认证配置准备")
-    from src.gateway.startup_auth import ensure_gateway_startup_auth
-    auth_result = await trace.measure("startup-auth",lambda: ensure_gateway_startup_auth(cfg))
-    cfg = auth_result.cfg
-    auth = auth_result.auth
-    # 🔗 连接点：后续实现 startup_auth 后接入
+    @property
+    def runtime(self) -> dict:
+        return self._runtime
 
-    # Phase 3: 插件引导
-    print("[gateway] Phase 3: 插件引导")
-    plugin_registry =await trace.measure("plugin-bootstrap",lambda: _auto_enable_plugins(cfg))
-    # 🔗 连接点：后续实现 plugin_bootstrap 后接入
-
-    # Phase 4: 运行时配置解析
-    print("[gateway] Phase 4: 运行时配置解析")
-    runtime_cfg = await trace.measure("runtime-config",lambda: _resolve_runtime_config(cfg))
-    # 🔗 连接点：后续实现 runtime_config 后接入
-
-    # Phase 5: 创建 HTTP/WS 服务器（aiohttp）
-    print("[gateway] Phase 5: 创建 HTTP/WS 服务器")
-    app = await _create_http_ws_server(runtime_cfg,auth)
-    # 🔗 连接点：后续实现 aiohttp 服务器后接入
-
-    # Phase 6-8: 早期运行时 + WS处理器 + 监听
-    print("[gateway] Phase 6-8: WS处理器 + 监听")
-    early_runtime = await trace.measure("runtime.early",lambda: _start_early_runtime(app, runtime_cfg))
-
-    # ★ Phase 7: 事件订阅 ★
-    await trace.measure("runtime.subscriptions",lambda: _start_event_subscriptions(early_runtime))
-
-    # ★ Phase 8: 方法处理器注册 + 开始监听 ★
-    await trace.measure("gateway.handlers",lambda: _register_handlers_and_listen(app, runtime_cfg, plugin_registry, early_runtime))
-    # Phase 9: 后附加运行时
-    print("[gateway] Phase 9: 后附加运行时")
-    await trace.measure("runtime.post-attach",lambda: _start_post_attach_runtime(app, runtime_cfg, early_runtime))
-
-    # Phase 10: 配置热重载
-    print("[gateway] Phase 10: 配置热重载")
-    import asyncio
-    asyncio.create_task(
-        _watch_config_reload(config_path, runtime))
-
-    print(f"[gateway] ✅ 10 阶段启动完成，监听 port={port}")
-
-    async def close(reason: str = "shutdown") -> None:
-        print(f"[gateway] Closing: {reason}")
-
-    return GatewayServer(close=close)
-
-
-
-from aiohttp import web
-import aiohttp
-from src.gateway.gates import (
-    authenticate_handshake,   # 🔗 待实现
-    validate_payload_size,    # 🔗 待实现
-    authorize_gateway_method, # 🔗 待实现
-)
-async def _create_http_ws_server(runtime_cfg, auth):
-    """对应 createHttpWsServer: 用 aiohttp 替代 Node.js http/ws"""
-    app = web.Application()
-
-    # 连接总闸：WebSocket 握手认证
-    async def ws_handler(request):
-        ws = web.WebSocketResponse()
-
-        # 连接总闸：握手认证
-        token = request.query.get("token") or \
-                request.headers.get("Authorization", "").replace("Bearer ", "")
-        # TODO 未实现 握手认证
-        if not authenticate_handshake(token, auth):
-            return web.Response(status=401, text="Unauthorized")
-
-        await ws.prepare(request)
-
-        async for msg in ws:
-            if msg.type == aiohttp.WSMsgType.TEXT:
-                # 带宽总闸 TODO未实现
-                if not validate_payload_size(msg.data):
-                    await ws.close(code=4000,
-                                   message="Payload too large")
-                    break
-
-                # 协议层：帧校验 TOTO未实现
-                frame = _parse_and_validate_frame(msg.data)
-                if not frame["valid"]:
-                    await ws.close(code=4000,
-                                   message="Invalid frame")
-                    break
-
-                # 方法层：权限校验 + 分发 TODO 未实现
-                result = await _dispatch_method(frame, auth)
-                await ws.send_json(result)
-
-        return ws
-
-    app.router.add_get("/ws", ws_handler)
-    return app
-
-
-import json
-from pathlib import Path
 
 async def _load_config_snapshot() -> dict:
-    """读取JSON配置文件，返回dict"""
     config_path = Path("openclaw.json")
     if not config_path.exists():
         return _default_config()
@@ -176,8 +70,8 @@ async def _load_config_snapshot() -> dict:
     parsed = json.loads(raw)
     return {**_default_config(), **parsed}
 
+
 def _default_config() -> dict:
-    """默认配置"""
     return {
         "gateway": {
             "port": 18789,
@@ -187,29 +81,16 @@ def _default_config() -> dict:
         }
     }
 
-from dataclasses import dataclass, field
-from typing import Any
 
 @dataclass
 class PluginRegistry:
     plugins: dict[str, Any] = field(default_factory=dict)
     methods: dict[str, dict] = field(default_factory=dict)
 
+
 async def _auto_enable_plugins(cfg: dict) -> PluginRegistry:
-    """对应 prepareGatewayPluginBootstrap: 插件引导
-
-    三步流程：
-    1. discover — 用 importlib.metadata.entry_points() 发现插件
-    2. register — 读取插件 manifest，构建注册表
-    3. extract  — 提取 Gateway 方法描述符
-
-    Args:
-        cfg: Phase 1 返回的配置 dict
-
-    Returns:
-        PluginRegistry 包含插件注册表和方法描述符
-    """
     raise NotImplementedError("TODO: 后续章节实现")
+
 
 @dataclass
 class RuntimeConfig:
@@ -221,49 +102,15 @@ class RuntimeConfig:
     max_payload_bytes: int = 1048576
     log_level: str = "info"
 
+
 async def _resolve_runtime_config(cfg: dict) -> RuntimeConfig:
-    """对应 resolveGatewayRuntimeConfig: 运行时配置解析
-
-    将启动配置「编译」为运行时配置：
-    1. 合并环境变量覆盖（PORT, BIND_HOST 等）
-    2. 解析 bind 地址
-    3. 解析 TLS 配置
-    4. 解析认证配置
-    5. 解析 CORS 来源
-
-    Args:
-        cfg: Phase 1-3 处理后的配置 dict
-
-    Returns:
-        RuntimeConfig dataclass，所有字段已解析
-    """
     raise NotImplementedError("TODO: 后续章节实现")
 
-_METHOD_NAME_PATTERN = __import__("re").compile(r"^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$")
+
+_METHOD_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$")
+
 
 def _parse_and_validate_frame(data: str) -> dict:
-    """协议层帧校验：对应 AJV JSON Schema 校验
-
-    对应 OpenClaw 源码：
-    - protocol/schema/frames.ts → RequestFrameSchema / ResponseFrameSchema / EventFrameSchema
-    - protocol/index.ts → validateRequestFrame = lazyCompile(RequestFrameSchema)
-    - server/ws-connection/message-handler.ts → handleMessage() 中的 JSON.parse + validateRequestFrame
-
-    OpenClaw 用 TypeBox (AJV) 定义三种帧 Schema：
-    - RequestFrame:  { type: "req",   id: string, method: string, params?: unknown }
-    - ResponseFrame: { type: "res",   id: string, ok: boolean,   payload?: unknown, error?: ErrorShape }
-    - EventFrame:    { type: "event", event: string, payload?: unknown, seq?: int }
-
-    Python 等价方案：手动校验（避免 jsonschema 库的运行时开销）。
-    三种帧类型用 type 字段区分（对应 OpenClaw 的 discriminator: "type"）。
-
-    Args:
-        data: WebSocket 接收到的文本消息
-
-    Returns:
-        {"valid": True, "type": ..., "method": ..., "id": ..., "params": ...}
-        或 {"valid": False, "error": "..."}
-    """
     try:
         parsed = json.loads(data)
     except (json.JSONDecodeError, TypeError):
@@ -318,7 +165,9 @@ def _parse_and_validate_frame(data: str) -> dict:
     else:
         return {"valid": False, "error": f"unknown frame type: {frame_type!r}"}
 
+
 _METHOD_REGISTRY: dict[str, dict] = {}
+
 
 def register_method(name: str, handler, *, required_role: str = "user", required_scopes: list[str] | None = None):
     _METHOD_REGISTRY[name] = {
@@ -327,37 +176,8 @@ def register_method(name: str, handler, *, required_role: str = "user", required
         "required_scopes": required_scopes or [],
     }
 
+
 async def _dispatch_method(frame: dict, auth: dict) -> dict:
-    """方法层分发：对应 OpenClaw handleGatewayRequest
-
-    对应 OpenClaw 源码：
-    - server-methods.ts → handleGatewayRequest()
-    - server-methods.ts → authorizeGatewayMethod() — role + scope 双重校验
-    - server-methods.ts → methodRegistry.getHandler(req.method) — 查找 handler
-    - server/ws-connection/message-handler.ts → handleMessage() 中的 handleGatewayRequest 调用
-
-    OpenClaw 的方法分发流程：
-    1. authorizeGatewayMethod(method, client, params) — 权限校验
-       - 解析 role（operator/node/admin）
-       - isRoleAuthorizedForMethod(role, method) — 角色是否允许调用该方法
-       - authorizeOperatorScopesForMethod(method, scopes, params) — scope 细粒度校验
-    2. methodRegistry.getHandler(method) — 查找方法注册表
-       - 找不到 → errorShape(INVALID_REQUEST, "unknown method")
-    3. handler({req, params, client, respond, context}) — 调用 handler
-    4. respond(true/false, payload, error) — 返回结果
-
-    Python 简化：
-    - 方法注册表用模块级 dict（Phase 8 填充）
-    - 权限校验调用 gates.authorize_gateway_method()
-    - 注册表为空时返回 method-not-found（预期行为）
-
-    Args:
-        frame: 已校验的帧 dict（_parse_and_validate_frame 返回的 valid=True 结果）
-        auth: 用户认证信息
-
-    Returns:
-        响应 dict，格式：{"type": "res", "id": ..., "ok": bool, ...}
-    """
     method = frame.get("method", "")
     frame_id = frame.get("id", "unknown")
 
@@ -395,50 +215,50 @@ async def _dispatch_method(frame: dict, auth: dict) -> dict:
             "error": {"code": "INTERNAL_ERROR", "message": str(exc)},
         }
 
+
+async def _create_http_ws_server(runtime_cfg, auth):
+    app = web.Application()
+
+    async def ws_handler(request):
+        ws = web.WebSocketResponse()
+
+        token = request.query.get("token") or \
+                request.headers.get("Authorization", "").replace("Bearer ", "")
+        if not authenticate_handshake(token, auth):
+            return web.Response(status=401, text="Unauthorized")
+
+        await ws.prepare(request)
+
+        async for msg in ws:
+            if msg.type == aiohttp.WSMsgType.TEXT:
+                if not validate_payload_size(msg.data):
+                    await ws.close(code=4000, message="Payload too large")
+                    break
+
+                frame = _parse_and_validate_frame(msg.data)
+                if not frame["valid"]:
+                    await ws.close(code=4000, message="Invalid frame")
+                    break
+
+                result = await _dispatch_method(frame, auth)
+                await ws.send_json(result)
+
+        return ws
+
+    app.router.add_get("/ws", ws_handler)
+    return app
+
+
 async def _start_early_runtime(
         app: web.Application,
         runtime_cfg: RuntimeConfig,
 ) -> dict:
-    """对应 startGatewayEarlyRuntime: 早期运行时
-
-    启动早期运行时组件：
-    1. 创建 broadcast 实例 — 事件广播器
-    2. 创建 nodeRegistry — 节点注册表
-    3. 注册本机节点
-    4. (可选) 启动 Bonjour/mDNS 服务发现
-
-    为什么在 Phase 5 之后？
-    - broadcast 和 nodeRegistry 需要 HTTP 服务器实例
-    - 注册自己需要知道实际监听地址和端口
-
-    Python 简化：跳过 Bonjour/mDNS，只保留核心组件。
-
-    Args:
-        app: Phase 5 创建的 aiohttp Application
-        runtime_cfg: 运行时配置
-
-    Returns:
-        {"broadcast": ..., "node_registry": ...}
-    """
     raise NotImplementedError("TODO: 后续章节实现")
+
 
 async def _start_event_subscriptions(
         early_runtime: dict,
 ) -> None:
-    """对应 startGatewayEventSubscriptions: 事件订阅
-
-    注册内部事件监听器：
-    1. agent.complete — Agent 完成任务
-    2. chat.delta — 聊天流式增量
-    3. tool.invoke — 工具调用
-    4. node.status — 节点状态变更
-
-    事件驱动架构：Gateway 不主动轮询，
-    而是订阅 broadcast 事件后被动响应。
-
-    Args:
-        early_runtime: Phase 6 返回的运行时组件
-    """
     raise NotImplementedError("TODO: 后续章节实现")
 
 
@@ -448,59 +268,16 @@ async def _register_handlers_and_listen(
         plugin_registry: PluginRegistry,
         early_runtime: dict,
 ) -> None:
-    """对应 gateway.handlers + startListening
-
-    两步流程：
-    1. 注册方法处理器
-       - 核心方法（agent.list, agent.create 等）
-       - 插件方法（从 PluginRegistry 提取）
-       - 合并到方法注册表 method_registry
-    2. 开始监听
-       - web.run_app(app, host=bind_host, port=port)
-
-    方法注册表模式：
-    method_registry = {
-        "agent.list": {
-            "handler": handle_agent_list,
-            "requiredRole": "user",
-            "requiredScopes": ["agent:read"],
-        },
-        ...
-    }
-
-    Args:
-        app: Phase 5 创建的 aiohttp Application
-        runtime_cfg: 运行时配置
-        plugin_registry: Phase 3 返回的插件注册表
-        early_runtime: Phase 6 返回的运行时组件
-    """
     raise NotImplementedError("TODO: 后续章节实现")
+
 
 async def _start_post_attach_runtime(
         app: web.Application,
         runtime_cfg: RuntimeConfig,
         early_runtime: dict,
 ) -> None:
-    """对应 runtime.post-attach: 后附加运行时
-
-    启动后附加运行时组件：
-    1. 定时任务 — APScheduler 或 asyncio.create_task
-    2. 健康检查循环 — 周期性检查各组件状态
-    3. Sidecar 启动 — subprocess 管理
-    4. 模型目录加载 — 扫描可用模型
-
-    为什么放在最后？
-    - 定时任务需要方法注册表（Phase 8）
-    - 健康检查需要 broadcast（Phase 6）
-    - Sidecar 需要 HTTP 服务器端口（Phase 5）
-    - 模型目录需要插件注册表（Phase 3）
-
-    Args:
-        app: Phase 5 创建的 aiohttp Application
-        runtime_cfg: 运行时配置
-        early_runtime: Phase 6 返回的运行时组件
-    """
     raise NotImplementedError("TODO: 后续章节实现")
+
 
 HOT_RELOADABLE_KEYS = {
     "gateway.logLevel",
@@ -516,28 +293,61 @@ RESTART_REQUIRED_KEYS = {
     "gateway.tls",
 }
 
+
 async def _watch_config_reload(
         config_path: str,
         runtime: dict,
 ) -> None:
-    """对应 registerConfigWriteListener: 配置热重载
-
-    监听配置文件变更，触发热重载：
-    1. watchfiles.watch(config_path) 监听文件变更
-    2. 读取新配置 → classify_config_change 分类
-    3. hot-reloaded → apply_hot_reload 热更新
-    4. restart-required → request_graceful_restart 请求重启
-
-    为什么放在最后？
-    - 热更新需要所有运行时状态就绪
-    - 重启需要优雅关闭所有组件
-
-    Python 选型：watchfiles 替代 chokidar
-    - 基于 Rust notify crate，性能优秀
-    - 原生 async 支持：async for changes in watchfiles.watch(path)
-
-    Args:
-        config_path: 配置文件路径
-        runtime: 运行时状态 dict
-    """
     raise NotImplementedError("TODO: 后续章节实现")
+
+
+async def start_gateway_server(
+        port: int = 18789,
+        opts: GatewayServerOptions | None = None,
+) -> GatewayServer:
+    if opts is None:
+        opts = GatewayServerOptions()
+
+    os.environ["OPENCLAW_GATEWAY_PORT"] = str(port)
+    trace = StartupTrace()
+
+    print(f"[gateway] Phase 1: 配置快照 port={port}")
+    cfg = await trace.measure("config-snapshot", lambda: _load_config_snapshot())
+
+    print("[gateway] Phase 2: 认证配置准备")
+    auth_result = await trace.measure("startup-auth", lambda: ensure_gateway_startup_auth(cfg))
+    cfg = auth_result.cfg
+    auth = auth_result.auth
+
+    print("[gateway] Phase 3: 插件引导")
+    plugin_registry = await trace.measure("plugin-bootstrap", lambda: _auto_enable_plugins(cfg))
+
+    print("[gateway] Phase 4: 运行时配置解析")
+    runtime_cfg = await trace.measure("runtime-config", lambda: _resolve_runtime_config(cfg))
+
+    print("[gateway] Phase 5: 创建 HTTP/WS 服务器")
+    app = await _create_http_ws_server(runtime_cfg, auth)
+
+    print("[gateway] Phase 6: 早期运行时")
+    early_runtime = await trace.measure("runtime.early", lambda: _start_early_runtime(app, runtime_cfg))
+
+    print("[gateway] Phase 7: 事件订阅")
+    await trace.measure("runtime.subscriptions", lambda: _start_event_subscriptions(early_runtime))
+
+    print("[gateway] Phase 8: 方法处理器注册 + 开始监听")
+    await trace.measure("gateway.handlers", lambda: _register_handlers_and_listen(app, runtime_cfg, plugin_registry, early_runtime))
+
+    print("[gateway] Phase 9: 后附加运行时")
+    await trace.measure("runtime.post-attach", lambda: _start_post_attach_runtime(app, runtime_cfg, early_runtime))
+
+    print("[gateway] Phase 10: 配置热重载")
+    config_path = str(Path("openclaw.json"))
+    runtime = {"app": app, "cfg": cfg, "auth": auth, "early_runtime": early_runtime}
+    asyncio.create_task(_watch_config_reload(config_path, runtime))
+
+    print(f"[gateway] ✅ 10 阶段启动完成，监听 port={port}")
+
+    async def close(reason: str = "shutdown") -> None:
+        print(f"[gateway] Closing: {reason}")
+
+    return GatewayServer(close=close, runtime=runtime)
