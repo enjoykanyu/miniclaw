@@ -7,7 +7,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Awaitable, Any
 from pathlib import Path
-
+from src.channel.health_monitor import ChannelHealthMonitor
+from src.channel.runtime_store import ChannelRuntimeStore
 from aiohttp import web
 import aiohttp
 
@@ -52,9 +53,23 @@ class GatewayServer:
     def __init__(self, close: Callable[[], Awaitable[None]], runtime: dict | None = None):
         self._close = close
         self._runtime = runtime or {}
+        self._channel_store = ChannelRuntimeStore()
+        self._health_monitor = ChannelHealthMonitor(
+            self._channel_store,
+            check_interval_s=300.0,
+            cooldown_cycles=2,
+            max_restarts_per_hour=10,
+        )
 
     async def close(self, reason: str = "shutdown") -> None:
         await self._close(reason)
+
+    async def start(self):
+        # ... 启动所有通道后 ...
+        self._health_monitor.start()
+
+    async def shutdown(self):
+        self._health_monitor.stop()
 
     @property
     def runtime(self) -> dict:
