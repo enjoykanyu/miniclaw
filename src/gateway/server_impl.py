@@ -352,6 +352,13 @@ async def start_gateway_server(
     print("[gateway] Phase 8: 方法处理器注册 + 开始监听")
     await trace.measure("gateway.handlers", lambda: _register_handlers_and_listen(app, runtime_cfg, plugin_registry, early_runtime))
 
+    try:
+        from gateway.agent_methods import register_agent_methods
+        register_agent_methods()
+        print("[gateway] Agent methods registered (agent.run, agent.list, agent.status)")
+    except Exception as e:
+        print(f"[gateway] Warning: Agent methods registration failed: {e}", file=sys.stderr)
+
     print("[gateway] Phase 9: 后附加运行时")
     await trace.measure("runtime.post-attach", lambda: _start_post_attach_runtime(app, runtime_cfg, early_runtime))
 

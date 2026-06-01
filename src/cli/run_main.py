@@ -71,7 +71,7 @@ async def try_run_gateway_run_fast_path(
     if not is_gateway_run_fast_path_argv(argv):
         return False
     _emit_startup_banner()
-    print("[openclaw] Gateway fast path detected...", file=sys.stderr)
+    print("[miniclaw] Gateway fast path detected...", file=sys.stderr)
     policy = _resolve_startup_policy(argv)
     _enable_console_capture()
     from gateway.server import start_gateway_server
@@ -95,6 +95,11 @@ async def run_cli(argv=None):
     startup_trace = StartupTrace()
     if await try_run_gateway_run_fast_path(argv, startup_trace):
         return
-    # ── 慢速路径（本节仅占位）──
-    # 🔗 第2章实现：注册全部子命令 → command-bootstrap → 匹配执行 ↩
+
+    from cli.agent_chat import is_agent_chat_argv, parse_agent_chat_argv, run_agent_chat
+    if is_agent_chat_argv(argv):
+        params = parse_agent_chat_argv(argv)
+        await run_agent_chat(**params)
+        return
+
     print("[run_main] 慢速路径暂未实现（第2章完成）", file=sys.stderr)

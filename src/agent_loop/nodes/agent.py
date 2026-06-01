@@ -1,0 +1,221 @@
+"""
+Agent Reasoning Node
+
+对标 OpenClaw 的 runEmbeddedAttempt：
+  - 组装上下文、加载工具、注入系统提示
+  - 调用 LLM 进行推理
+  - 判断是否需要工具调用
+
+这是 Agentic Loop 的核心节点，实现 ReAct 模式的 Reason 步骤。
+LangGraph 中通过条件边决定下一步：tool_execute / supervisor / finish
+"""
+
+from typing import Dict, Any, List, Optional
+
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+from loguru import logger
+
+from agent_loop.state import AgenticLoopState
+from agent_loop.loop_detection import LoopDetector, LoopSeverity
+
+
+def _get_agent_system_prompt(agent_name: str, state: AgenticLoopState) -> str:
+    base_prompts = {
+        "learning": "你是学习规划助手，帮助制定学习计划、追踪进度、安排复习。你可以使用工具来完成具体操作。",
+        "task": "你是任务管理助手，管理TODO清单、创建任务、生成每日报告。你可以使用工具来完成具体操作。",
+        "info": "你是信息获取助手，查询天气、推送新闻、知识问答。你可以使用工具来完成具体操作。",
+        "health": "你是健康提醒助手，定时提醒休息、管理作息、提供健康建议。你可以使用工具来完成具体操作。",
+        "data": "你是数据处理助手，操作Excel表格、数据分析。你可以使用工具来完成具体操作。",
+        "chat": "你是日常聊天助手，处理一般对话和引导用户使用功能。",
+        "supervisor": "你是协调者，负责分析用户请求并决定由哪个专业助手处理。",
+    }
+    prompt = base_prompts.get(agent_name, f"你是 {agent_name} 助手。")
+
+    rag_context = state.get("rag_context")
+    if rag_context:
+        prompt += f"\n\n【知识库检索结果】\n{rag_context}\n你可以参考以上知识库内容回答用户问题。"
+
+    force_search_context = state.get("force_search_context")
+    if force_search_context:
+        prompt += f"\n\n【联网搜索结果】\n{force_search_context}\n请基于以上搜索结果回答用户问题。"
+
+    metadata = state.get("metadata") or {}
+    if metadata.get("force_think"):
+        prompt += "\n\n【强制要求】请先使用 think 工具进行深度思考，然后再给出回答。"
+    if metadata.get("force_search") and not force_search_context:
+        prompt += "\n\n【强制要求】请使用 tavily 工具进行联网搜索，然后基于搜索结果回答。"
+
+    loop_iteration = state.get("loop_iteration", 0)
+    if loop_iteration > 5:
+        prompt += "\n\n【注意】当前推理已进行多轮，如果已有足够信息请直接给出最终回答，不要再调用工具。"
+    if loop_iteration > 10:
+        prompt += "\n\n【紧急】推理轮次较多，请立即基于已有信息总结并给出最终回答，不要再调用任何工具。"
+    if loop_iteration > 20:
+        prompt += "\n\n【终止】推理轮次已接近上限，必须立即给出当前最佳答案，禁止再调用工具。"
+
+    return prompt
+
+
+def _get_tools_for_agent(agent_name: str) -> List:
+    tool_map = {
+        "learning": ["create_study_plan", "generate_excel_plan", "schedule_review"],
+        "task": ["create_task", "list_tasks", "complete_task", "generate_daily_summary"],
+        "info": ["get_weather", "get_news", "rag_search"],
+        "health": ["set_reminder", "get_greeting", "get_health_tips"],
+        "data": ["create_excel_file", "read_excel_file", "analyze_data", "update_excel_cell"],
+        "chat": [],
+    }
+    tool_names = tool_map.get(agent_name, [])
+
+    tools = []
+    for name in tool_names:
+        tool = _try_load_tool(name)
+        if tool:
+            tools.append(tool)
+
+    metadata_overrides = {}
+    return tools, metadata_overrides
+
+
+def _try_load_tool(tool_name: str) -> Optional[Any]:
+    try:
+        from miniclaw.tools.registry import registry
+        tool = registry.get(tool_name)
+        if tool and hasattr(tool, "to_langchain_tool"):
+            return tool.to_langchain_tool()
+        if tool and hasattr(tool, "name"):
+            return tool
+    except Exception:
+        pass
+
+    builtin_modules = {
+        "tavily": "miniclaw.tools.tavily",
+        "think": "miniclaw.tools.think",
+        "get_weather": "miniclaw.tools.weather",
+        "get_news": "miniclaw.tools.news",
+    }
+
+    module_path = builtin_modules.get(tool_name)
+    if module_path:
+        try:
+            import importlib
+            module = importlib.import_module(module_path)
+            if hasattr(module, tool_name):
+                tool = getattr(module, tool_name)
+                if hasattr(tool, "name"):
+                    return tool
+        except Exception as e:
+            logger.debug(f"Failed to load tool '{tool_name}': {e}")
+
+    return None
+
+
+async def agent_reason_node(state: AgenticLoopState) -> Dict[str, Any]:
+    """
+    Agent 推理节点
+
+    对标 OpenClaw 的 runEmbeddedAttempt：
+    1. 组装上下文（系统提示 + 对话历史 + 工具）
+    2. 调用 LLM 进行推理
+    3. 返回推理结果（含可能的工具调用）
+
+    这是 ReAct 循环的 Reason 步骤。
+    如果 LLM 返回 tool_calls，条件边会路由到 tool_execute。
+    如果 LLM 返回最终回答，条件边会路由到 finish 或 supervisor。
+    """
+    from miniclaw.utils.llm import get_smart_llm
+
+    current_agent = state.get("current_agent", "chat")
+    loop_iteration = state.get("loop_iteration", 0) + 1
+
+    logger.info(f"AgentReason[{current_agent}] iteration={loop_iteration}")
+
+    system_prompt = _get_agent_system_prompt(current_agent, state)
+    tools, _ = _get_tools_for_agent(current_agent)
+
+    metadata = state.get("metadata") or {}
+    if metadata.get("force_think"):
+        think_tool = _try_load_tool("think")
+        if think_tool and not any(t.name == "think" if hasattr(t, "name") else False for t in tools):
+            tools.append(think_tool)
+    if metadata.get("force_search") and not state.get("force_search_context"):
+        tavily_tool = _try_load_tool("tavily")
+        if tavily_tool and not any(t.name == "tavily" if hasattr(t, "name") else False for t in tools):
+            tools.append(tavily_tool)
+
+    try:
+        from miniclaw.mcp.tools import mcp_tool_registry
+        mcp_tools = mcp_tool_registry.get_all_tools()
+        tools.extend(mcp_tools)
+    except Exception:
+        pass
+
+    messages = list(state.get("messages", []))
+    full_messages = [SystemMessage(content=system_prompt)] + messages
+
+    try:
+        llm = get_smart_llm()
+
+        if tools:
+            llm_with_tools = llm.bind_tools(tools)
+            response = await llm_with_tools.ainvoke(full_messages)
+        else:
+            response = await llm.ainvoke(full_messages)
+
+        has_tool_calls = (
+            hasattr(response, "tool_calls") and
+            response.tool_calls and
+            len(response.tool_calls) > 0
+        )
+
+        if has_tool_calls:
+            logger.info(
+                f"AgentReason[{current_agent}] LLM requests {len(response.tool_calls)} tool calls: "
+                f"{[tc.get('name', tc.get('function', {}).get('name', '?')) for tc in response.tool_calls]}"
+            )
+
+        updates: Dict[str, Any] = {
+            "loop_iteration": loop_iteration,
+            "attempt_status": "running",
+            "messages": [response],
+        }
+
+        if not has_tool_calls:
+            response_content = getattr(response, "content", "") or ""
+            updates["agent_response"] = response_content
+
+        return updates
+
+    except Exception as e:
+        logger.error(f"AgentReason[{current_agent}] LLM call failed: {e}")
+
+        error_msg = str(e)
+        error_code = "LLM_ERROR"
+
+        if "rate_limit" in error_msg.lower() or "429" in error_msg:
+            error_code = "RATE_LIMITED"
+        elif "context" in error_msg.lower() and ("overflow" in error_msg.lower() or "too long" in error_msg.lower() or "exceeds" in error_msg.lower() or "maximum" in error_msg.lower()):
+            error_code = "CONTEXT_OVERFLOW"
+        elif "timeout" in error_msg.lower():
+            error_code = "TIMEOUT"
+        elif "auth" in error_msg.lower() or "401" in error_msg or "403" in error_msg:
+            error_code = "AUTH_ERROR"
+
+        from langchain_core.messages import AIMessage
+        fallback_content = "抱歉，处理请求时遇到了问题，请稍后重试。"
+
+        if error_code == "CONTEXT_OVERFLOW":
+            fallback_content = "上下文过长，正在尝试压缩..."
+        elif error_code == "RATE_LIMITED":
+            fallback_content = "请求过于频繁，正在重试..."
+        elif error_code == "AUTH_ERROR":
+            fallback_content = "认证失败，正在尝试其他配置..."
+
+        return {
+            "loop_iteration": loop_iteration,
+            "attempt_status": "failed",
+            "last_error": error_msg,
+            "last_error_code": error_code,
+            "messages": [AIMessage(content=fallback_content)],
+            "agent_response": fallback_content,
+        }
