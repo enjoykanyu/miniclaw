@@ -187,12 +187,10 @@ class AgenticLoopApp:
         对标 OpenClaw 的 runWithModelFallback：
         1. 尝试主模型
         2. 如果失败（Rate Limit / Auth / Context Overflow），尝试降级模型
-        3. Context Overflow 优先尝试压缩恢复
-        4. 所有候选都失败则抛出 FallbackSummaryError
+        3. 所有候选都失败则抛出 FallbackSummaryError
         """
-        max_retries = 3
+        max_retries = 2
         last_error = None
-        last_error_code = None
 
         for attempt in range(max_retries):
             try:
@@ -200,63 +198,28 @@ class AgenticLoopApp:
 
                 if result.get("attempt_status") == AttemptStatus.FAILED.value:
                     error_code = result.get("last_error_code", "")
-                    last_error = result.get("last_error")
-                    last_error_code = error_code
-                    logger.warning(
-                        f"Attempt {attempt + 1} failed with {error_code}: {last_error}"
-                    )
+                    if error_code in ("RATE_LIMITED", "CONTEXT_OVERFLOW"):
+                        last_error = result.get("last_error")
+                        logger.warning(
+                            f"Attempt {attempt + 1} failed with {error_code}: {last_error}"
+                        )
 
-                    if error_code == "CONTEXT_OVERFLOW":
-                        from agent_loop.compaction import compact_context
-                        compact_result = await compact_context(initial_state)
-                        initial_state.update(compact_result)
-                        logger.info(f"Context compacted, retrying (attempt {attempt + 2})")
+                        if error_code == "CONTEXT_OVERFLOW":
+                            from agent_loop.compaction import compact_context
+                            compact_result = await compact_context(initial_state)
+                            initial_state.update(compact_result)
+
                         continue
-
-                    if error_code == "RATE_LIMITED":
-                        import asyncio
-                        backoff = min(2 ** attempt, 8)
-                        logger.info(f"Rate limited, backing off {backoff}s (attempt {attempt + 1})")
-                        await asyncio.sleep(backoff)
-                        continue
-
-                    if error_code == "AUTH_ERROR":
-                        logger.info(f"Auth error on attempt {attempt + 1}, trying fallback model")
-                        try:
-                            from miniclaw.utils.llm import get_fast_llm
-                            fallback_llm = get_fast_llm()
-                            logger.info("Switched to fallback model for next attempt")
-                        except Exception:
-                            pass
-                        continue
-
-                    if error_code == "TIMEOUT":
-                        logger.info(f"Timeout on attempt {attempt + 1}, retrying with shorter context")
-                        from agent_loop.compaction import compact_context
-                        compact_result = await compact_context(initial_state)
-                        initial_state.update(compact_result)
-                        continue
-
-                    return result
 
                 return result
 
             except Exception as e:
                 last_error = str(e)
-                last_error_code = "EXCEPTION"
                 logger.warning(f"Attempt {attempt + 1} exception: {e}")
 
                 if "rate_limit" in last_error.lower() or "429" in last_error:
-                    import asyncio
-                    backoff = min(2 ** attempt, 8)
-                    await asyncio.sleep(backoff)
                     continue
                 if "context" in last_error.lower():
-                    from agent_loop.compaction import compact_context
-                    compact_result = await compact_context(initial_state)
-                    initial_state.update(compact_result)
-                    continue
-                if attempt < max_retries - 1:
                     continue
                 raise
 
@@ -265,7 +228,7 @@ class AgenticLoopApp:
             **initial_state,
             "attempt_status": AttemptStatus.FAILED.value,
             "last_error": last_error,
-            "last_error_code": last_error_code or "FALLBACK_EXHAUSTED",
+            "last_error_code": "FALLBACK_EXHAUSTED",
             "agent_response": "所有模型尝试均失败，请稍后重试。",
         }
 

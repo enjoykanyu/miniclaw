@@ -76,12 +76,6 @@ def _should_continue_after_reason(state: AgenticLoopState) -> Literal["tool_exec
             return "supervisor"
         return "finish"
 
-    current_agent = state.get("current_agent")
-    agent_response = state.get("agent_response")
-    if current_agent and current_agent != "supervisor" and agent_response:
-        logger.info(f"Agent '{current_agent}' completed with response, routing back to supervisor for multi-step coordination")
-        return "supervisor"
-
     return "finish"
 
 

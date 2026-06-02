@@ -81,70 +81,26 @@ def _prune_tool_results(messages: List[Any], budget_ratio: float = 0.75) -> List
     - 仅针对 ToolResult + 内存
     - TTL 5min, softTrim 30%, hardClear 50%
     - 单条工具结果 <= 50% 上下文
-    - 总工具结果预算 <= 75% 上下文
     """
-    max_tokens = 128000
-    single_tool_max = int(max_tokens * 0.5)
-    total_tool_budget = int(max_tokens * budget_ratio)
-
     pruned = []
-    total_tool_tokens = 0
-
     for msg in messages:
         msg_type = getattr(msg, "type", "")
         if msg_type == "tool":
             content = getattr(msg, "content", "")
-            msg_tokens = estimate_message_tokens(msg)
-
-            if msg_tokens > single_tool_max:
-                truncate_to = int(single_tool_max * 0.6)
-                truncated = content[:truncate_to * 3] + "\n...[结果已截断-单条超限]"
-                if hasattr(msg, "model_copy"):
-                    new_msg = msg.model_copy(update={"content": truncated})
-                else:
-                    try:
-                        msg.content = truncated
-                    except (AttributeError, TypeError):
-                        pass
-                    new_msg = msg
-                pruned.append(new_msg)
-                total_tool_tokens += estimate_message_tokens(new_msg)
-                continue
-
-            if total_tool_tokens + msg_tokens > total_tool_budget:
-                if content and len(content) > 500:
-                    truncated = content[:300] + "\n...[结果已截断-总预算超限]"
-                    if hasattr(msg, "model_copy"):
-                        new_msg = msg.model_copy(update={"content": truncated})
-                    else:
-                        try:
-                            msg.content = truncated
-                        except (AttributeError, TypeError):
-                            pass
-                        new_msg = msg
-                    pruned.append(new_msg)
-                    total_tool_tokens += estimate_message_tokens(new_msg)
-                continue
-
             if content and len(content) > 2000:
                 truncated = content[:1500] + "\n...[结果已截断]"
                 if hasattr(msg, "model_copy"):
                     new_msg = msg.model_copy(update={"content": truncated})
                 else:
+                    new_msg = msg
                     try:
                         msg.content = truncated
                     except (AttributeError, TypeError):
                         pass
                     new_msg = msg
                 pruned.append(new_msg)
-                total_tool_tokens += estimate_message_tokens(new_msg)
                 continue
-
-            pruned.append(msg)
-            total_tool_tokens += msg_tokens
-        else:
-            pruned.append(msg)
-
+        pruned.append(msg)
     return pruned
 
 
