@@ -3,8 +3,14 @@
 # 职责：版本守卫 + 帮助快径 + 导入入口
 # =============================
 import sys
+import os
 
 MIN_PYTHON = (3, 11)
+
+def _ensure_src_on_path():
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
 
 def ensure_supported_python_version():
     if sys.version_info[:2] < MIN_PYTHON:
@@ -37,6 +43,7 @@ def try_output_version_fast_path(argv):
 
 def main():
     ensure_supported_python_version()
+    _ensure_src_on_path()
     argv = sys.argv
     if try_output_help_fast_path(argv): return
     if try_output_version_fast_path(argv): return

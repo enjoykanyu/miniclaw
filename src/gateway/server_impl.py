@@ -7,17 +7,18 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Awaitable, Any
 from pathlib import Path
-from src.channel.health_monitor import ChannelHealthMonitor
-from src.channel.runtime_store import ChannelRuntimeStore
+from channel.health_monitor import ChannelHealthMonitor
+from channel.runtime_store import ChannelRuntimeStore
 from aiohttp import web
 import aiohttp
 
-from src.gateway.startup_auth import ensure_gateway_startup_auth
-from src.gateway.gates import (
+from gateway.startup_auth import ensure_gateway_startup_auth
+from gateway.gates import (
     authenticate_handshake,
     validate_payload_size,
     authorize_gateway_method,
 )
+from gateway.config_reload import _watch_config_reload
 
 
 @dataclass
@@ -104,7 +105,8 @@ class PluginRegistry:
 
 
 async def _auto_enable_plugins(cfg: dict) -> PluginRegistry:
-    raise NotImplementedError("TODO: 后续章节实现")
+    registry = PluginRegistry()
+    return registry
 
 
 @dataclass
@@ -119,7 +121,24 @@ class RuntimeConfig:
 
 
 async def _resolve_runtime_config(cfg: dict) -> RuntimeConfig:
-    raise NotImplementedError("TODO: 后续章节实现")
+    gw = cfg.get("gateway", {})
+    bind_mode = gw.get("bind", "loopback")
+    if bind_mode == "loopback":
+        bind_host = "127.0.0.1"
+    elif bind_mode == "lan":
+        bind_host = "0.0.0.0"
+    else:
+        bind_host = gw.get("bind", "0.0.0.0")
+
+    return RuntimeConfig(
+        bind_host=bind_host,
+        port=gw.get("port", 18789),
+        auth=gw.get("auth"),
+        tls=gw.get("tls"),
+        cors_origins=gw.get("corsOrigins", []),
+        max_payload_bytes=gw.get("maxPayloadBytes", 1048576),
+        log_level=gw.get("logLevel", "info"),
+    )
 
 
 _METHOD_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$")
@@ -196,7 +215,9 @@ async def _dispatch_method(frame: dict, auth: dict) -> dict:
     method = frame.get("method", "")
     frame_id = frame.get("id", "unknown")
 
-    auth_error = authorize_gateway_method(method, auth)
+    entry = _METHOD_REGISTRY.get(method)
+    descriptor = entry if entry else None
+    auth_error = authorize_gateway_method(method, auth, descriptor)
     if auth_error:
         return {
             "type": "res",
@@ -205,7 +226,6 @@ async def _dispatch_method(frame: dict, auth: dict) -> dict:
             "error": auth_error,
         }
 
-    entry = _METHOD_REGISTRY.get(method)
     if not entry:
         return {
             "type": "res",
@@ -239,14 +259,16 @@ async def _create_http_ws_server(runtime_cfg, auth):
 
         token = request.query.get("token") or \
                 request.headers.get("Authorization", "").replace("Bearer ", "")
-        if not authenticate_handshake(token, auth):
+        auth_result = authenticate_handshake(token, auth)
+        if not auth_result.get("ok"):
             return web.Response(status=401, text="Unauthorized")
 
         await ws.prepare(request)
 
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
-                if not validate_payload_size(msg.data):
+                size_result = validate_payload_size(msg.data)
+                if not size_result.get("ok"):
                     await ws.close(code=4000, message="Payload too large")
                     break
 
@@ -255,7 +277,7 @@ async def _create_http_ws_server(runtime_cfg, auth):
                     await ws.close(code=4000, message="Invalid frame")
                     break
 
-                result = await _dispatch_method(frame, auth)
+                result = await _dispatch_method(frame, auth_result)
                 await ws.send_json(result)
 
         return ws
@@ -268,13 +290,16 @@ async def _start_early_runtime(
         app: web.Application,
         runtime_cfg: RuntimeConfig,
 ) -> dict:
-    raise NotImplementedError("TODO: 后续章节实现")
+    return {
+        "health_route_added": False,
+        "cors_configured": len(runtime_cfg.cors_origins) > 0,
+    }
 
 
 async def _start_event_subscriptions(
         early_runtime: dict,
 ) -> None:
-    raise NotImplementedError("TODO: 后续章节实现")
+    pass
 
 
 async def _register_handlers_and_listen(
@@ -283,7 +308,23 @@ async def _register_handlers_and_listen(
         plugin_registry: PluginRegistry,
         early_runtime: dict,
 ) -> None:
-    raise NotImplementedError("TODO: 后续章节实现")
+    async def health_handler(request):
+        return web.json_response({"status": "ok", "port": runtime_cfg.port})
+
+    async def ready_handler(request):
+        return web.json_response({"ready": True})
+
+    app.router.add_get("/healthz", health_handler)
+    app.router.add_get("/readyz", ready_handler)
+
+    for method_name, method_entry in plugin_registry.methods.items():
+        register_method(method_name, method_entry.get("handler"), required_role=method_entry.get("required_role", "user"))
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, runtime_cfg.bind_host, runtime_cfg.port)
+    await site.start()
+    print(f"[gateway] Listening on {runtime_cfg.bind_host}:{runtime_cfg.port}")
 
 
 async def _start_post_attach_runtime(
@@ -291,29 +332,7 @@ async def _start_post_attach_runtime(
         runtime_cfg: RuntimeConfig,
         early_runtime: dict,
 ) -> None:
-    raise NotImplementedError("TODO: 后续章节实现")
-
-
-HOT_RELOADABLE_KEYS = {
-    "gateway.logLevel",
-    "gateway.maxPayloadBytes",
-    "gateway.broadcast.bufferSize",
-    "gateway.cron",
-}
-
-RESTART_REQUIRED_KEYS = {
-    "gateway.port",
-    "gateway.bind",
-    "gateway.auth",
-    "gateway.tls",
-}
-
-
-async def _watch_config_reload(
-        config_path: str,
-        runtime: dict,
-) -> None:
-    raise NotImplementedError("TODO: 后续章节实现")
+    pass
 
 
 async def start_gateway_server(
@@ -333,6 +352,9 @@ async def start_gateway_server(
     auth_result = await trace.measure("startup-auth", lambda: ensure_gateway_startup_auth(cfg))
     cfg = auth_result.cfg
     auth = auth_result.auth
+    if auth_result.generated_token:
+        print(f"[gateway] 🔑 Generated auth token: {auth_result.generated_token}")
+        print(f"[gateway]    Use: ws://127.0.0.1:{port}/ws?token={auth_result.generated_token}")
 
     print("[gateway] Phase 3: 插件引导")
     plugin_registry = await trace.measure("plugin-bootstrap", lambda: _auto_enable_plugins(cfg))
@@ -369,7 +391,17 @@ async def start_gateway_server(
 
     print(f"[gateway] ✅ 10 阶段启动完成，监听 port={port}")
 
+    shutdown_event = asyncio.Event()
+
     async def close(reason: str = "shutdown") -> None:
         print(f"[gateway] Closing: {reason}")
+        shutdown_event.set()
 
-    return GatewayServer(close=close, runtime=runtime)
+    server = GatewayServer(close=close, runtime=runtime)
+
+    try:
+        await shutdown_event.wait()
+    except asyncio.CancelledError:
+        pass
+
+    return server

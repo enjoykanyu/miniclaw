@@ -1,59 +1,63 @@
 import hmac
 from typing import Optional
 
-MAX_PAYLOAD_BYTES = 1024 * 1024  # 1MB，对应MAX_PAYLOAD_BYTES
+MAX_PAYLOAD_BYTES = 1024 * 1024
 
 def authenticate_handshake(
         token: Optional[str],
         auth: dict,
 ) -> dict:
-    """连接总闸：对应 auth.ts 的 authorizeGatewayConnect
+    mode = auth.get("mode", "token")
 
-    校验 WebSocket 握手阶段的 token/password。
-    使用 hmac.compare_digest 防止时序攻击。
+    if mode == "none":
+        return {"ok": True, "role": "user", "method": "none"}
 
-    Args:
-        token: 客户端提供的 token（来自 query 或 Authorization header）
-        auth: 认证配置 dict，包含 mode/token/password
+    if mode == "token":
+        if not token:
+            return {"ok": False, "reason": "token_required"}
+        expected = auth.get("token", "")
+        if not hmac.compare_digest(token, expected):
+            return {"ok": False, "reason": "invalid_token"}
+        return {"ok": True, "role": "user", "method": "token"}
 
-    Returns:
-        {"ok": True, "role": "..."} 或 {"ok": False}
-    """
-    raise NotImplementedError("TODO: 后续章节实现")
+    if mode == "password":
+        if not token:
+            return {"ok": False, "reason": "password_required"}
+        expected = auth.get("password", "")
+        if not hmac.compare_digest(token, expected):
+            return {"ok": False, "reason": "invalid_password"}
+        return {"ok": True, "role": "user", "method": "password"}
+
+    return {"ok": False, "reason": f"unknown_auth_mode:{mode}"}
 
 def authorize_gateway_method(
         method: str,
         auth: dict,
-        descriptor: dict,
-) -> dict:
-    """权限总闸：对应 server-methods.ts 的 authorizeGatewayMethod
+        descriptor: Optional[dict] = None,
+) -> Optional[dict]:
+    if not auth.get("ok"):
+        return {"code": "UNAUTHORIZED", "message": "Authentication required"}
 
-    校验 role + scope 双重权限。
-    先验 role，再验 scope 的 every() 语义。
+    if descriptor is None:
+        return None
 
-    Args:
-        method: 方法名，如 "agent.list"
-        auth: 用户认证信息，包含 role 和 scope
-        descriptor: 方法描述符，包含 requiredRole 和 requiredScopes
+    required_role = descriptor.get("required_role")
+    if required_role and auth.get("role") != required_role:
+        return {"code": "FORBIDDEN", "message": "Insufficient role"}
 
-    Returns:
-        {"allowed": True} 或 {"allowed": False, "reason": "..."}
-    """
-    raise NotImplementedError("TODO: 后续章节实现")
+    required_scopes = descriptor.get("required_scopes")
+    if required_scopes:
+        auth_scopes = auth.get("scopes", [])
+        if not all(s in auth_scopes for s in required_scopes):
+            return {"code": "FORBIDDEN", "message": "Missing required scopes"}
+
+    return None
 
 def validate_payload_size(
         data: str,
         max_bytes: int = MAX_PAYLOAD_BYTES,
 ) -> dict:
-    """带宽总闸：对应 net.ts 的 validatePayloadSize
-
-    检查消息字节数是否超过上限。
-
-    Args:
-        data: 消息文本
-        max_bytes: 最大字节数，默认 1MB
-
-    Returns:
-        {"ok": True, "size": N} 或 {"ok": False, "size": N}
-    """
-    raise NotImplementedError("TODO: 后续章节实现")
+    size = len(data.encode("utf-8"))
+    if size <= max_bytes:
+        return {"ok": True, "size": size}
+    return {"ok": False, "size": size}
