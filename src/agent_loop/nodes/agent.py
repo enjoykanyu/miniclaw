@@ -46,12 +46,10 @@ def _get_agent_system_prompt(agent_name: str, state: AgenticLoopState) -> str:
         prompt += "\n\n【强制要求】请使用 tavily 工具进行联网搜索，然后基于搜索结果回答。"
 
     loop_iteration = state.get("loop_iteration", 0)
-    if loop_iteration > 5:
-        prompt += "\n\n【注意】当前推理已进行多轮，如果已有足够信息请直接给出最终回答，不要再调用工具。"
     if loop_iteration > 10:
-        prompt += "\n\n【紧急】推理轮次较多，请立即基于已有信息总结并给出最终回答，不要再调用任何工具。"
+        prompt += "\n\n【注意】当前推理已进行多轮，请尽快总结并给出最终回答。"
     if loop_iteration > 20:
-        prompt += "\n\n【终止】推理轮次已接近上限，必须立即给出当前最佳答案，禁止再调用工具。"
+        prompt += "\n\n【紧急】推理轮次已接近上限，请立即给出当前最佳答案。"
 
     return prompt
 
@@ -194,22 +192,13 @@ async def agent_reason_node(state: AgenticLoopState) -> Dict[str, Any]:
 
         if "rate_limit" in error_msg.lower() or "429" in error_msg:
             error_code = "RATE_LIMITED"
-        elif "context" in error_msg.lower() and ("overflow" in error_msg.lower() or "too long" in error_msg.lower() or "exceeds" in error_msg.lower() or "maximum" in error_msg.lower()):
+        elif "context" in error_msg.lower() and "overflow" in error_msg.lower():
             error_code = "CONTEXT_OVERFLOW"
         elif "timeout" in error_msg.lower():
             error_code = "TIMEOUT"
-        elif "auth" in error_msg.lower() or "401" in error_msg or "403" in error_msg:
-            error_code = "AUTH_ERROR"
 
         from langchain_core.messages import AIMessage
         fallback_content = "抱歉，处理请求时遇到了问题，请稍后重试。"
-
-        if error_code == "CONTEXT_OVERFLOW":
-            fallback_content = "上下文过长，正在尝试压缩..."
-        elif error_code == "RATE_LIMITED":
-            fallback_content = "请求过于频繁，正在重试..."
-        elif error_code == "AUTH_ERROR":
-            fallback_content = "认证失败，正在尝试其他配置..."
 
         return {
             "loop_iteration": loop_iteration,

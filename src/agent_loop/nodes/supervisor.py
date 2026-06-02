@@ -52,12 +52,6 @@ Worker 完成后会回到你这里，你需要决定：
 - 是否需要路由到另一个 Worker 继续处理
 - 还是任务已经完成，可以 finish
 
-## 关键原则
-- 如果 Worker 已经给出了完整的回答，且不需要其他 Worker 协作，请选择 finish
-- 如果用户请求涉及多个领域（如"查天气并创建任务"），请依次路由到对应 Worker
-- 避免将同一个 Worker 重复路由，除非有明确的新需求
-- 如果已经循环多轮，优先选择 finish 避免无限循环
-
 请分析用户请求，选择最合适的 Worker Agent 或 finish。"""
 
 
@@ -87,19 +81,6 @@ def _build_routing_context(state: AgenticLoopState) -> str:
     if agent_response:
         parts.append(f"当前 Worker 的回复: {agent_response[:500]}")
 
-    tool_call_history = state.get("tool_call_history", [])
-    if tool_call_history:
-        executed_agents = set()
-        for record in tool_call_history:
-            tool_name = record.get("tool_name", "")
-            for agent_name in _WORKER_DESCRIPTIONS:
-                if agent_name in tool_name or tool_name.startswith(agent_name):
-                    executed_agents.add(agent_name)
-        if current_agent:
-            executed_agents.add(current_agent)
-        if executed_agents:
-            parts.append(f"已执行的 Worker: {', '.join(executed_agents)}")
-
     messages = state.get("messages", [])
     if len(messages) > 1:
         parts.append("\n最近对话:")
@@ -112,8 +93,6 @@ def _build_routing_context(state: AgenticLoopState) -> str:
     loop_iteration = state.get("loop_iteration", 0)
     if loop_iteration > 0:
         parts.append(f"\n当前循环轮次: {loop_iteration}")
-        if loop_iteration > 3:
-            parts.append("⚠️ 循环轮次较多，如果任务已基本完成请选择 finish")
 
     return "\n".join(parts)
 
