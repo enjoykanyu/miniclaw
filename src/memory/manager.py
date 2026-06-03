@@ -4,7 +4,7 @@ import json
 import time
 from typing import List, Optional, Dict, Any
 
-from miniclaw.memory.types import (
+from memory.types import (
     MemoryChunk,
     MemorySearchResult,
     MemorySource,
@@ -13,14 +13,14 @@ from miniclaw.memory.types import (
     MMRConfig,
     MemoryProviderStatus,
 )
-from miniclaw.memory.files import (
+from memory.files import (
     list_memory_files,
     chunk_markdown,
     read_memory_file,
     get_relative_path,
 )
-from miniclaw.memory.embedding import EmbeddingProvider, create_embedding_provider, compute_text_hash
-from miniclaw.memory.postprocess import (
+from memory.embedding import EmbeddingProvider, create_embedding_provider, compute_text_hash
+from memory.postprocess import (
     merge_hybrid_results,
     apply_temporal_decay,
     apply_mmr,

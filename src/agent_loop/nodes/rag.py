@@ -58,7 +58,7 @@ async def rag_detect_node(state: AgenticLoopState) -> Dict[str, Any]:
         return {"needs_rag": True}
 
     try:
-        from miniclaw.utils.llm import get_fast_llm
+        from utils.llm import get_fast_llm
 
         llm = get_fast_llm()
         detect_messages = [
@@ -101,28 +101,26 @@ async def rag_retrieve_node(state: AgenticLoopState) -> Dict[str, Any]:
         return {}
 
     try:
-        from miniclaw.rag.rag_tools import rag_search
+        from memory.manager import get_memory_manager
+
         metadata = state.get("metadata") or {}
-        selected_kbs = metadata.get("selected_kbs")
-        kb_retrieval_mode = metadata.get("kb_retrieval_mode", "intent")
+        workspace_dir = state.get("workspace_dir", "")
+        agent_id = state.get("agent_id", "default")
 
-        if selected_kbs:
-            from miniclaw.rag.rag_tools import set_rag_tool_context
-            set_rag_tool_context(selected_kbs=selected_kbs, kb_retrieval_mode=kb_retrieval_mode)
-
-        try:
-            result = await rag_search.ainvoke({"query": user_message, "top_k": 5})
-        except Exception:
-            result = rag_search.invoke({"query": user_message, "top_k": 5})
+        memory_mgr = get_memory_manager(workspace_dir=workspace_dir, agent_id=agent_id)
+        results = await memory_mgr.search(query=user_message, max_results=5)
 
         rag_context = ""
         rag_sources = []
 
-        if isinstance(result, str):
-            rag_context = result
-        elif isinstance(result, dict):
-            rag_context = result.get("content", result.get("result", ""))
-            rag_sources = result.get("sources", [])
+        if results:
+            parts = []
+            for r in results:
+                chunk_text = r.chunk.text if hasattr(r, "chunk") else str(r)
+                parts.append(chunk_text)
+                if hasattr(r, "chunk") and hasattr(r.chunk, "path"):
+                    rag_sources.append(r.chunk.path)
+            rag_context = "\n\n".join(parts)
 
         logger.info(f"RAG retrieve: got {len(rag_context)} chars context")
 
@@ -137,10 +135,3 @@ async def rag_retrieve_node(state: AgenticLoopState) -> Dict[str, Any]:
             "rag_context": "",
             "rag_sources": [],
         }
-
-    finally:
-        try:
-            from miniclaw.rag.rag_tools import clear_rag_tool_context
-            clear_rag_tool_context()
-        except Exception:
-            pass

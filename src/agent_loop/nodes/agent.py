@@ -77,7 +77,7 @@ def _get_tools_for_agent(agent_name: str) -> List:
 
 def _try_load_tool(tool_name: str) -> Optional[Any]:
     try:
-        from miniclaw.tools.registry import registry
+        from tools.registry import registry
         tool = registry.get(tool_name)
         if tool and hasattr(tool, "to_langchain_tool"):
             return tool.to_langchain_tool()
@@ -87,10 +87,10 @@ def _try_load_tool(tool_name: str) -> Optional[Any]:
         pass
 
     builtin_modules = {
-        "tavily": "miniclaw.tools.tavily",
-        "think": "miniclaw.tools.think",
-        "get_weather": "miniclaw.tools.weather",
-        "get_news": "miniclaw.tools.news",
+        "tavily": "tools.tavily",
+        "think": "tools.think",
+        "get_weather": "tools.weather",
+        "get_news": "tools.news",
     }
 
     module_path = builtin_modules.get(tool_name)
@@ -121,7 +121,7 @@ async def agent_reason_node(state: AgenticLoopState) -> Dict[str, Any]:
     如果 LLM 返回 tool_calls，条件边会路由到 tool_execute。
     如果 LLM 返回最终回答，条件边会路由到 finish 或 supervisor。
     """
-    from miniclaw.utils.llm import get_smart_llm
+    from utils.llm import get_smart_llm
 
     current_agent = state.get("current_agent", "chat")
     loop_iteration = state.get("loop_iteration", 0) + 1
@@ -142,7 +142,7 @@ async def agent_reason_node(state: AgenticLoopState) -> Dict[str, Any]:
             tools.append(tavily_tool)
 
     try:
-        from miniclaw.mcp.tools import mcp_tool_registry
+        from mcp.tools import mcp_tool_registry
         mcp_tools = mcp_tool_registry.get_all_tools()
         tools.extend(mcp_tools)
     except Exception:

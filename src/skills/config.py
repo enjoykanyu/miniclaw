@@ -3,8 +3,8 @@ import platform
 import shutil
 from typing import Optional, List, Dict
 
-from miniclaw.skills.types import SkillEntry, OpenClawSkillMetadata
-from miniclaw.skills.frontmatter import resolve_skill_key
+from skills.types import SkillEntry, OpenClawSkillMetadata
+from skills.frontmatter import resolve_skill_key
 
 
 def should_include_skill(

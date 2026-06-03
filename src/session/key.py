@@ -1,7 +1,7 @@
 import re
 from typing import Optional
 
-from miniclaw.session.types import SessionScope, DEFAULT_AGENT_ID
+from session.types import SessionScope, DEFAULT_AGENT_ID
 
 
 def normalize_agent_id(agent_id: str) -> str:

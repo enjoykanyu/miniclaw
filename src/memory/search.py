@@ -1,8 +1,8 @@
 import sqlite3
 from typing import List, Optional
 
-from miniclaw.memory.types import MemoryChunk, MemorySearchResult, MemorySource
-from miniclaw.memory.postprocess import bm25_rank_to_score
+from memory.types import MemoryChunk, MemorySearchResult, MemorySource
+from memory.postprocess import bm25_rank_to_score
 
 
 def _row_get(row, key: str, default: str = "") -> str:

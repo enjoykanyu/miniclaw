@@ -1,4 +1,4 @@
-from miniclaw.memory.types import (
+from memory.types import (
     MemoryChunk,
     MemorySearchResult,
     MemoryProviderStatus,
@@ -7,7 +7,7 @@ from miniclaw.memory.types import (
     TemporalDecayConfig,
     MMRConfig,
 )
-from miniclaw.memory.manager import MemoryIndexManager, get_memory_manager
+from memory.manager import MemoryIndexManager, get_memory_manager
 
 __all__ = [
     "MemoryChunk",

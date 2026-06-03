@@ -242,18 +242,18 @@ class AgenticLoopApp:
         import asyncio
 
         try:
-            from miniclaw.config.settings import settings
+            from config.settings import settings
 
             tavily_key = settings.TAVILY_API_KEY
 
             if tavily_key:
-                from miniclaw.tools.tavily import _search_tavily
+                from tools.tavily import _search_tavily
                 result = await asyncio.to_thread(_search_tavily, query, 5, tavily_key)
                 logger.info(f"Force search (Tavily) for: {query}, result length: {len(result)}")
                 return result
 
             try:
-                from miniclaw.tools.tavily import _search_duckduckgo
+                from tools.tavily import _search_duckduckgo
                 result = await asyncio.to_thread(_search_duckduckgo, query, 5)
                 logger.info(f"Force search (DuckDuckGo) for: {query}, result length: {len(result)}")
                 return result

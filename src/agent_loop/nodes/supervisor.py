@@ -110,7 +110,7 @@ async def supervisor_node(state: AgenticLoopState) -> Dict[str, Any]:
     - next_agent == "finish" → finish 节点
     - 其他 → agent_reason 节点（同时设置 current_agent）
     """
-    from miniclaw.utils.llm import get_smart_llm
+    from utils.llm import get_smart_llm
 
     user_message = _get_last_user_message(state)
     routing_context = _build_routing_context(state)

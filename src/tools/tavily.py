@@ -1,5 +1,5 @@
 from langchain_community.tools.tavily_search import TavilySearchResults
-from miniclaw.config.settings import settings
+from config.settings import settings
 
 async def _search_tavily(query: str, max_results: int = 5) -> str:
     if not settings.TAVILY_API_KEY:

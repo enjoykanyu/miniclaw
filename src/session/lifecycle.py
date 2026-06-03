@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
-from miniclaw.session.types import (
+from session.types import (
     SessionEntry,
     SessionScope,
     SessionType,
@@ -14,8 +14,8 @@ from miniclaw.session.types import (
     DEFAULT_RESET_TRIGGERS,
     DEFAULT_RESET_AT_HOUR,
 )
-from miniclaw.session.key import resolve_session_key, normalize_agent_id
-from miniclaw.session.store import SessionStore, resolve_default_store_path
+from session.key import resolve_session_key, normalize_agent_id
+from session.store import SessionStore, resolve_default_store_path
 
 
 def _detect_session_type(

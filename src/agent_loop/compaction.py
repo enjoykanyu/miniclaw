@@ -171,7 +171,7 @@ async def _generate_conversation_summary(messages: List[Any], state: AgenticLoop
     对标 OpenClaw 的 LLM 摘要压缩策略
     """
     try:
-        from miniclaw.utils.llm import get_fast_llm
+        from utils.llm import get_fast_llm
 
         llm = get_fast_llm()
 

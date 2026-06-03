@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from miniclaw.memory.types import (
+from memory.types import (
     CANONICAL_ROOT_MEMORY_FILENAME,
     MEMORY_DIR_NAME,
     DREAMS_FILENAME,

@@ -2,8 +2,8 @@ import os
 from datetime import datetime
 from typing import Optional
 
-from miniclaw.memory.types import MemoryFlushPlan
-from miniclaw.memory.files import (
+from memory.types import MemoryFlushPlan
+from memory.files import (
     get_daily_memory_path,
     ensure_memory_dir,
     write_memory_file,

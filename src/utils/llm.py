@@ -1,6 +1,6 @@
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
-from miniclaw.config.settings import settings
+from config.settings import settings
 
 _smart_llm = None
 _fast_llm = None

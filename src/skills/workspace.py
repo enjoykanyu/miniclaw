@@ -1,14 +1,14 @@
 import os
 from typing import Optional, List, Dict, Tuple
 
-from miniclaw.skills.types import Skill, SkillEntry, SkillSnapshot
-from miniclaw.skills.frontmatter import (
+from skills.types import Skill, SkillEntry, SkillSnapshot
+from skills.frontmatter import (
     parse_frontmatter,
     resolve_openclaw_metadata,
     resolve_skill_invocation_policy,
     resolve_skill_key,
 )
-from miniclaw.skills.config import filter_skill_entries
+from skills.config import filter_skill_entries
 
 
 SKILL_FILENAME = "SKILL.md"

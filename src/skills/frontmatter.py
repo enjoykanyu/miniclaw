@@ -1,7 +1,7 @@
 import re
 from typing import Optional, Dict, List, Any
 
-from miniclaw.skills.types import (
+from skills.types import (
     ParsedSkillFrontmatter,
     OpenClawSkillMetadata,
     SkillInstallSpec,

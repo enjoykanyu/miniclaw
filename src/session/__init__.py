@@ -1,4 +1,4 @@
-from miniclaw.session.types import (
+from session.types import (
     SessionEntry,
     SessionScope,
     SessionResetMode,
@@ -6,14 +6,14 @@ from miniclaw.session.types import (
     SessionFreshness,
     SessionInitResult,
 )
-from miniclaw.session.key import (
+from session.key import (
     build_agent_main_session_key,
     build_agent_peer_session_key,
     resolve_session_key,
     normalize_agent_id,
 )
-from miniclaw.session.store import SessionStore
-from miniclaw.session.lifecycle import init_session_state
+from session.store import SessionStore
+from session.lifecycle import init_session_state
 
 __all__ = [
     "SessionEntry",

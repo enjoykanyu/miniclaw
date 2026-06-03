@@ -46,7 +46,7 @@ def _extract_tool_args(tool_call: Dict[str, Any]) -> Dict[str, Any]:
 
 def _find_tool(tool_name: str) -> Optional[Any]:
     try:
-        from miniclaw.tools.registry import registry
+        from tools.registry import registry
         tool = registry.get(tool_name)
         if tool:
             if hasattr(tool, "to_langchain_tool"):
@@ -57,12 +57,12 @@ def _find_tool(tool_name: str) -> Optional[Any]:
         pass
 
     builtin_modules = {
-        "tavily": "miniclaw.tools.tavily",
-        "think": "miniclaw.tools.think",
-        "get_weather": "miniclaw.tools.weather",
-        "fetch_weather": "miniclaw.tools.weather",
-        "get_news": "miniclaw.tools.news",
-        "fetch_news": "miniclaw.tools.news",
+        "tavily": "tools.tavily",
+        "think": "tools.think",
+        "get_weather": "tools.weather",
+        "fetch_weather": "tools.weather",
+        "get_news": "tools.news",
+        "fetch_news": "tools.news",
     }
 
     module_path = builtin_modules.get(tool_name)

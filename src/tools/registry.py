@@ -1,4 +1,4 @@
-from miniclaw.tools.base import Tool, ToolCategory, MCPToolProxy, BuiltinTool
+from tools.base import Tool, ToolCategory, MCPToolProxy, BuiltinTool
 from typing import Optional, List, Dict, Any
 
 class ToolRegistry:

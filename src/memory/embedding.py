@@ -1,7 +1,7 @@
 import hashlib
 from typing import List, Optional
 
-from miniclaw.config.settings import settings
+from config.settings import settings
 
 
 class EmbeddingProvider:

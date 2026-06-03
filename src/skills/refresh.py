@@ -2,8 +2,8 @@ import os
 import time
 from typing import Optional, Callable, List, Set
 
-from miniclaw.skills.types import SkillEntry
-from miniclaw.skills.workspace import load_skill_entries
+from skills.types import SkillEntry
+from skills.workspace import load_skill_entries
 
 
 _skills_version = 0

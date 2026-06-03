@@ -1,5 +1,5 @@
-from miniclaw.tools.base import MCPToolProxy, ToolCategory, Tool
-from miniclaw.tools.registry import registry
+from tools.base import MCPToolProxy, ToolCategory, Tool
+from tools.registry import registry
 from typing import Dict, List, Optional
 
 class MCPToolRegistry:

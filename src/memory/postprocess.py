@@ -2,8 +2,8 @@ import math
 from datetime import datetime
 from typing import List, Set, Dict, Tuple
 
-from miniclaw.memory.types import MemorySearchResult, MemoryChunk, MMRConfig, TemporalDecayConfig
-from miniclaw.memory.files import parse_date_from_memory_path, is_evergreen_path, get_relative_path
+from memory.types import MemorySearchResult, MemoryChunk, MMRConfig, TemporalDecayConfig
+from memory.files import parse_date_from_memory_path, is_evergreen_path, get_relative_path
 
 
 def apply_temporal_decay(

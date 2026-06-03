@@ -1,4 +1,4 @@
-from miniclaw.skills.types import (
+from skills.types import (
     Skill,
     SkillEntry,
     SkillSnapshot,
@@ -8,8 +8,8 @@ from miniclaw.skills.types import (
     SkillExposure,
     ParsedSkillFrontmatter,
 )
-from miniclaw.skills.workspace import load_skill_entries, build_skill_snapshot
-from miniclaw.skills.config import should_include_skill
+from skills.workspace import load_skill_entries, build_skill_snapshot
+from skills.config import should_include_skill
 
 __all__ = [
     "Skill",

@@ -4,7 +4,7 @@ import time
 import tempfile
 from typing import Optional, Dict, Any
 
-from miniclaw.session.types import SessionEntry, merge_session_entry
+from session.types import SessionEntry, merge_session_entry
 
 
 class SessionStore:
