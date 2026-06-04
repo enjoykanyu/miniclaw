@@ -5,12 +5,15 @@ import os
 
 
 def _resolve_env_file():
+    this_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env"),
-        os.path.join(os.getcwd(), ".env"),
+        os.path.join(this_dir, "..", ".env"),
+        os.path.join(this_dir, "..", "..", "src", ".env"),
         os.path.join(os.getcwd(), "src", ".env"),
+        os.path.join(os.getcwd(), ".env"),
     ]
     for p in candidates:
+        p = os.path.normpath(p)
         if os.path.isfile(p):
             return p
     return ".env"
