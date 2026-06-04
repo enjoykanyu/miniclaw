@@ -56,12 +56,12 @@ def _get_agent_system_prompt(agent_name: str, state: AgenticLoopState) -> str:
 
 def _get_tools_for_agent(agent_name: str) -> List:
     tool_map = {
-        "learning": ["create_study_plan", "generate_excel_plan", "schedule_review"],
-        "task": ["create_task", "list_tasks", "complete_task", "generate_daily_summary"],
-        "info": ["get_weather", "get_news", "rag_search"],
-        "health": ["set_reminder", "get_greeting", "get_health_tips"],
-        "data": ["create_excel_file", "read_excel_file", "analyze_data", "update_excel_cell"],
-        "chat": [],
+        "learning": ["think"],
+        "task": ["think"],
+        "info": ["get_weather", "get_news", "think"],
+        "health": ["think"],
+        "data": ["think"],
+        "chat": ["think"],
     }
     tool_names = tool_map.get(agent_name, [])
 
