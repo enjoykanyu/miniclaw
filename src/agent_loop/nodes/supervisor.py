@@ -132,16 +132,38 @@ async def supervisor_node(state: AgenticLoopState) -> Dict[str, Any]:
 
     try:
         from pydantic import BaseModel, Field
+        import json
+        import re
 
         class RoutingDecision(BaseModel):
             next_agent: str = Field(
                 description=f"下一个 Worker Agent 名称，可选: {_WORKER_TYPES}",
             )
-            reason: str = Field(description="选择该 Agent 的原因")
+            reason: str = Field(default="", description="选择该 Agent 的原因")
 
         llm = get_smart_llm()
-        structured_llm = llm.with_structured_output(RoutingDecision)
-        decision = await structured_llm.ainvoke(messages)
+        response = await llm.ainvoke(messages)
+        content = response.content
+
+        json_match = re.search(r'\{[^}]+\}', content)
+        if json_match:
+            raw_dict = json.loads(json_match.group())
+        else:
+            raw_dict = {"next_agent": content.strip(), "reason": ""}
+
+        normalized = {}
+        for k, v in raw_dict.items():
+            k_lower = k.lower()
+            if k_lower in ("next_agent", "next_worker", "agent", "worker", "action", "choice"):
+                normalized["next_agent"] = str(v).lower().strip()
+            elif k_lower in ("reason", "thoughts", "thought", "rationale"):
+                normalized["reason"] = str(v)
+            else:
+                normalized[k] = v
+        normalized.setdefault("next_agent", "chat")
+        normalized.setdefault("reason", "")
+
+        decision = RoutingDecision(**normalized)
         next_agent = decision.next_agent.lower().strip()
         decision_reason = decision.reason
 
