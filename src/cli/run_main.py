@@ -78,6 +78,7 @@ async def try_run_gateway_run_fast_path(
     from gateway.server_impl import GatewayServerOptions
     bind = policy.pop("bind", "loopback")
     opts = GatewayServerOptions(bind=bind)
+    # 当用户执行了 gateway run 时，直接启动 Gateway 服务器，不加载 run_main
     await start_gateway_server(port=policy.get("port", 18789), opts=opts)
     return True
 
