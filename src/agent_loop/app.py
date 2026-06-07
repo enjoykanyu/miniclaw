@@ -23,6 +23,7 @@ from agent_loop.state import AgenticLoopState, create_loop_state, AttemptStatus
 from agent_loop.graph import build_agentic_loop_graph
 from agent_loop.compaction import estimate_total_tokens
 from agent_loop.skills_snapshot import build_skills_snapshot
+from gateway.hooks import hook_runner
 
 
 class AgenticLoopApp:
@@ -83,6 +84,14 @@ class AgenticLoopApp:
         """
         config = {"configurable": {"thread_id": thread_id}}
 
+        # ── Hook: before_agent_run（对标 OpenClaw 生命周期）──
+        session_key = f"{user_id}:{session_id}"
+        await hook_runner.run_void_hook(
+            "before_agent_run",
+            {"message": message, "user_id": user_id, "session_id": session_id},
+            session_key=session_key,
+        )
+
         initial_state = create_loop_state(
             user_id=user_id,
             session_id=session_id,
@@ -137,6 +146,13 @@ class AgenticLoopApp:
         except Exception as e:
             logger.error(f"AgenticLoopApp.chat failed: {e}", exc_info=True)
             return f"抱歉，处理请求时出现错误：{str(e)[:100]}"
+        finally:
+            # ── Hook: agent_end（对标 OpenClaw 生命周期）──
+            await hook_runner.run_void_hook(
+                "agent_end",
+                {"user_id": user_id, "session_id": session_id},
+                session_key=session_key,
+            )
 
     async def stream(
         self,
@@ -205,13 +221,53 @@ class AgenticLoopApp:
         1. 尝试主模型
         2. 如果失败（Rate Limit / Auth / Context Overflow），尝试降级模型
         3. 所有候选都失败则抛出 FallbackSummaryError
+
+        集成 API Key 轮换：遇到速率限制自动切换 Key
         """
+        import copy
+        from utils.api_key_rotation import (
+            execute_with_api_key_rotation,
+            collect_provider_api_keys,
+        )
+
         max_retries = 2
         last_error = None
+        # 使用深拷贝，避免压缩操作污染原始状态
+        current_state = copy.deepcopy(initial_state)
+
+        # ── 收集 API Keys 用于轮换 ──
+        api_keys = collect_provider_api_keys()
+
+        async def _invoke_with_key(api_key: str) -> AgenticLoopState:
+            """使用指定 API Key 执行推理"""
+            # 如果有 Key 且当前使用 OpenAI 兼容 provider，临时替换 Key
+            if api_key:
+                import os
+                from config.settings import settings
+                original_key = os.environ.get("OPENAI_API_KEY", "")
+                original_llm_key = os.environ.get("LLM_API_KEY", "")
+                try:
+                    os.environ["OPENAI_API_KEY"] = api_key
+                    os.environ["LLM_API_KEY"] = api_key
+                    # 重置 LLM 缓存，使新 Key 生效
+                    from utils.llm import reset_llm_cache
+                    reset_llm_cache()
+                    return await self.graph.ainvoke(current_state, config)
+                finally:
+                    os.environ["OPENAI_API_KEY"] = original_key
+                    os.environ["LLM_API_KEY"] = original_llm_key
+                    from utils.llm import reset_llm_cache
+                    reset_llm_cache()
+            else:
+                return await self.graph.ainvoke(current_state, config)
 
         for attempt in range(max_retries):
             try:
-                result = await self.graph.ainvoke(initial_state, config)
+                # ── 使用 API Key 轮换执行推理 ──
+                result = await execute_with_api_key_rotation(
+                    _invoke_with_key,
+                    api_keys,
+                )
 
                 if result.get("attempt_status") == AttemptStatus.FAILED.value:
                     error_code = result.get("last_error_code", "")
@@ -223,8 +279,8 @@ class AgenticLoopApp:
 
                         if error_code == "CONTEXT_OVERFLOW":
                             from agent_loop.compaction import compact_context
-                            compact_result = await compact_context(initial_state)
-                            initial_state.update(compact_result)
+                            compact_result = await compact_context(current_state)
+                            current_state.update(compact_result)
 
                         continue
 
@@ -242,7 +298,7 @@ class AgenticLoopApp:
 
         logger.error(f"All model fallback attempts exhausted: {last_error}")
         return {
-            **initial_state,
+            **current_state,
             "attempt_status": AttemptStatus.FAILED.value,
             "last_error": last_error,
             "last_error_code": "FALLBACK_EXHAUSTED",
