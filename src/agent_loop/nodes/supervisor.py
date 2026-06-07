@@ -119,6 +119,14 @@ async def supervisor_node(state: AgenticLoopState) -> Dict[str, Any]:
         worker_descriptions=_build_worker_descriptions()
     )
 
+    # 注入 snapshot 的 prompt（对标 OpenClaw skillsSnapshot.prompt）
+    from agent_loop.skills_snapshot import SkillsSnapshot
+    snapshot_dict = state.get("skills_snapshot")
+    if snapshot_dict:
+        snapshot = SkillsSnapshot.from_dict(snapshot_dict)
+        if snapshot.prompt:
+            system_prompt += f"\n\n{snapshot.prompt}"
+
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=(

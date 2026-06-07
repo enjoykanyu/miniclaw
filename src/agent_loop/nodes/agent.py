@@ -8,6 +8,11 @@ Agent Reasoning Node
 
 这是 Agentic Loop 的核心节点，实现 ReAct 模式的 Reason 步骤。
 LangGraph 中通过条件边决定下一步：tool_execute / supervisor / finish
+
+改造要点（Skills Snapshot 冻结）：
+  - 旧方式：每次 agent_reason_node 调用时实时扫描工具 → 可能中途变
+  - 新方式：从 state.skills_snapshot 读取冻结的工具列表 → 整个 loop 不变
+  - 对标 OpenClaw: agent-command.ts L810 构建 snapshot → L1373 传入 runAgentAttempt
 """
 
 from typing import Dict, Any, List, Optional
@@ -54,7 +59,48 @@ def _get_agent_system_prompt(agent_name: str, state: AgenticLoopState) -> str:
     return prompt
 
 
-def _get_tools_for_agent(agent_name: str) -> List:
+def _get_tools_from_snapshot(state: AgenticLoopState) -> List:
+    """
+    从冻结的 Skills Snapshot 中加载工具
+
+    对标 OpenClaw: agent-command.ts L1373 skillsSnapshot 传入 runAgentAttempt
+
+    苏格拉底式提问：为什么从 snapshot 加载而非实时扫描？
+    → 因为 snapshot 是在 loop 开始前冻结的，保证整个 loop 期间工具不变。
+      如果实时扫描，中途注册的新工具会"悄悄"出现在 LLM 的工具列表中，
+      但 LLM 之前的决策是基于旧工具列表做的 → 语义漂移。
+
+    流程：
+    1. 从 state 中读取 skills_snapshot（dict）
+    2. 反序列化为 SkillsSnapshot 对象
+    3. 只加载 snapshot 中声明的工具（tool_names）
+    4. 如果 snapshot 不存在，fallback 到实时扫描（兼容旧逻辑）
+    """
+    from agent_loop.skills_snapshot import SkillsSnapshot
+
+    snapshot_dict = state.get("skills_snapshot")
+    if not snapshot_dict:
+        # Fallback：没有 snapshot 时实时扫描（兼容旧逻辑）
+        logger.warning("No skills_snapshot in state, falling back to real-time scan")
+        current_agent = state.get("current_agent", "chat")
+        tools, _ = _get_tools_for_agent_legacy(current_agent)
+        return tools
+
+    snapshot = SkillsSnapshot.from_dict(snapshot_dict)
+    tools = []
+    for tool_name in snapshot.tool_names:
+        tool = _try_load_tool(tool_name)
+        if tool:
+            tools.append(tool)
+
+    logger.debug(
+        f"Loaded {len(tools)} tools from snapshot "
+        f"(version={snapshot.version}, frozen_at={snapshot.frozen_at})"
+    )
+    return tools
+
+
+def _get_tools_for_agent_legacy(agent_name: str) -> List:
     tool_map = {
         "learning": ["think"],
         "task": ["think"],
@@ -129,7 +175,21 @@ async def agent_reason_node(state: AgenticLoopState) -> Dict[str, Any]:
     logger.info(f"AgentReason[{current_agent}] iteration={loop_iteration}")
 
     system_prompt = _get_agent_system_prompt(current_agent, state)
-    tools, _ = _get_tools_for_agent(current_agent)
+
+    # ── 从冻结的 Snapshot 加载工具（改造核心！）──
+    # 旧方式: tools, _ = _get_tools_for_agent(current_agent)
+    #   → 每次 ReAct 循环都重新扫描，可能中途变
+    # 新方式: tools = _get_tools_from_snapshot(state)
+    #   → 从 state 中的 snapshot 读取，整个 loop 不变
+    tools = _get_tools_from_snapshot(state)
+
+    # 注入 snapshot 的 prompt 到系统提示（对标 OpenClaw skillsSnapshot.prompt）
+    from agent_loop.skills_snapshot import SkillsSnapshot
+    snapshot_dict = state.get("skills_snapshot")
+    if snapshot_dict:
+        snapshot = SkillsSnapshot.from_dict(snapshot_dict)
+        if snapshot.prompt:
+            system_prompt += f"\n\n{snapshot.prompt}"
 
     metadata = state.get("metadata") or {}
     if metadata.get("force_think"):

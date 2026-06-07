@@ -22,6 +22,7 @@ from loguru import logger
 from agent_loop.state import AgenticLoopState, create_loop_state, AttemptStatus
 from agent_loop.graph import build_agentic_loop_graph
 from agent_loop.compaction import estimate_total_tokens
+from agent_loop.skills_snapshot import build_skills_snapshot
 
 
 class AgenticLoopApp:
@@ -75,9 +76,10 @@ class AgenticLoopApp:
 
         对标 OpenClaw 的 agentCommand 完整流程：
         1. 解析 Session
-        2. runWithModelFallback（含降级）
-        3. 投递结果
-        4. 持久化对话记录
+        2. 冻结 Skills Snapshot（新增！对标 agent-command.ts L810）
+        3. runWithModelFallback（含降级）
+        4. 投递结果
+        5. 持久化对话记录
         """
         config = {"configurable": {"thread_id": thread_id}}
 
@@ -95,6 +97,17 @@ class AgenticLoopApp:
             "selected_kbs": selected_kbs,
             "kb_retrieval_mode": kb_retrieval_mode,
         }
+
+        # ── 冻结 Skills Snapshot（对标 OpenClaw agent-command.ts L810）──
+        # 在 loop 开始前一次性构建，整个 loop 期间不变。
+        # 即便中途有人注册了新工具，本次 loop 依然使用起跑时的版本。
+        # 这是为了防止"中途换 skill 导致语义漂移"。
+        snapshot = build_skills_snapshot()
+        initial_state["skills_snapshot"] = snapshot.to_dict()
+        logger.info(
+            f"Skills snapshot frozen: version={snapshot.version}, "
+            f"tools={snapshot.tool_names}, frozen_at={snapshot.frozen_at}"
+        )
 
         if force_search:
             search_context = await self._execute_force_search(message)
@@ -157,6 +170,10 @@ class AgenticLoopApp:
             "selected_kbs": selected_kbs,
             "kb_retrieval_mode": kb_retrieval_mode,
         }
+
+        # ── 冻结 Skills Snapshot ──
+        snapshot = build_skills_snapshot()
+        initial_state["skills_snapshot"] = snapshot.to_dict()
 
         if force_search:
             search_context = await self._execute_force_search(message)

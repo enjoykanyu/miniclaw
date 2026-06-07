@@ -91,6 +91,12 @@ class AgenticLoopState(TypedDict):
     needs_rag: Optional[bool]
     force_search_context: Optional[str]
 
+    # ── Skills Snapshot（对标 OpenClaw SkillSnapshot）──
+    # 在 loop 开始前冻结，整个 loop 期间不变。
+    # 存为 dict 而非 SkillsSnapshot 对象，因为 LangGraph state 需要 JSON 可序列化。
+    # 使用时: SkillsSnapshot.from_dict(state["skills_snapshot"])
+    skills_snapshot: Optional[dict]
+
     metadata: Optional[dict]
     created_at: Optional[str]
     updated_at: Optional[str]
@@ -149,6 +155,7 @@ def create_loop_state(
         rag_sources=[],
         needs_rag=None,
         force_search_context=None,
+        skills_snapshot=None,
         metadata={},
         created_at=now,
         updated_at=now,
