@@ -31,9 +31,8 @@ def try_handle_root_version_fast_path(argv):
     return False
 
 async def run_main_or_root_help(argv):
-    if len(argv) <= 1:
-        sys.stdout.write("Use 'miniclaw --help' for usage.\n")
-        return
+    # 裸根命令或子命令都交给 run_cli 处理
+    # 对标 OpenClaw: 裸命令直接进入交互式聊天
     from cli.run_main import run_cli
     await run_cli(argv)
 
@@ -43,3 +42,8 @@ async def run_entry(argv=None):
     if try_handle_root_version_fast_path(argv): return
     if ensure_cli_respawn_ready(): return
     await run_main_or_root_help(argv)
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(run_entry())

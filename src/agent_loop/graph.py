@@ -17,8 +17,7 @@ Agentic Loop Graph — LangGraph StateGraph 编排
   rag_detect → [需要RAG] → rag_retrieve → supervisor
              → [不需要RAG] → supervisor
 
-  supervisor → Command(goto=agent_reason) 设置 current_agent
-            → Command(goto=finish)
+  supervisor → 条件边读取 next_agent → agent_reason / finish
 
   agent_reason → [有tool_calls] → tool_execute → agent_reason (ReAct 循环)
               → [无tool_calls + 需要继续] → supervisor (多步协作)
@@ -31,7 +30,6 @@ from typing import Literal, Optional, Dict, Any
 
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.types import Command
 from loguru import logger
 
 from agent_loop.state import AgenticLoopState, create_loop_state, AttemptStatus
@@ -116,9 +114,9 @@ def _route_from_supervisor(state: AgenticLoopState) -> Literal["agent_reason", "
     """
     Supervisor 之后的路由
 
-    supervisor_node 返回 Command(goto=...)，
-    但 Command 需要在条件边的映射中有对应的目标节点。
-    我们简化为两个目标：agent_reason（执行推理）或 finish（结束）。
+    supervisor_node 通过 state.next_agent 字段传递路由决策，
+    条件边读取该字段决定下一步：agent_reason（执行推理）或 finish（结束）。
+    不使用 Command(goto=...)，避免与条件边机制冲突。
     """
     next_agent = state.get("next_agent", "finish")
     if next_agent == "finish":

@@ -31,7 +31,15 @@ def try_output_help_fast_path(argv):
     if should_defer_root_help_to_runtime_entry():
         return False
     print("Usage: miniclaw [command] [options]")
-    print("  gateway run    Start the WebSocket Gateway")
+    print()
+    print("Commands:")
+    print("  chat            Start interactive TUI chat (default)")
+    print("  gateway run     Start the WebSocket Gateway")
+    print("  agent chat      Start agent chat (legacy)")
+    print()
+    print("Options:")
+    print("  --help, -h      Show help")
+    print("  --version, -V   Show version")
     return True
 
 def try_output_version_fast_path(argv):

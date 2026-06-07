@@ -2,8 +2,6 @@ import sys
 import os
 from typing import Any
 
-# from version import VERSION
-
 
 class StartupTrace:
     def __init__(self):
@@ -44,6 +42,7 @@ def is_gateway_run_fast_path_argv(argv):
         if not saw_gateway: return False
         i += 1
     return saw_gateway and saw_run
+
 
 def _emit_startup_banner():
     """启动横幅 →TODO  从 logo.txt 读取 ↩"""
@@ -91,16 +90,158 @@ def should_load_dotenv() -> bool:
     return os.path.exists(".env")
 
 
+# ── TUI / Chat 命令检测与解析 ──
+# 对标 OpenClaw: openclaw chat → miniclaw chat
+
+TUI_OPTIONS = frozenset({"--user-id", "--session-id", "-m", "--message"})
+TUI_FLAGS = frozenset({"--think", "--search", "--verbose", "--usage"})
+
+
+def is_tui_chat_argv(argv: list[str]) -> bool:
+    """
+    检测是否是 chat/tui 命令
+
+    支持的调用方式（对标 OpenClaw）：
+      miniclaw chat
+      miniclaw chat -m "hello"
+      miniclaw chat --think --search
+      miniclaw chat --verbose
+    """
+    tokens = argv[1:]
+    i = 0
+    saw_chat = False
+
+    while i < len(tokens):
+        token = tokens[i]
+        if token == "--":
+            break
+        if token in ("--help", "-h", "--version", "-V"):
+            return False
+        if token in ROOT_OPTIONS:
+            i += 1
+            continue
+        if token == "chat" and not saw_chat:
+            saw_chat = True
+            i += 1
+            continue
+        if saw_chat and token in TUI_OPTIONS:
+            i += 2
+            continue
+        if saw_chat and token in TUI_FLAGS:
+            i += 1
+            continue
+        if saw_chat and token.startswith("-"):
+            return False
+        if not saw_chat:
+            return False
+        i += 1
+
+    return saw_chat
+
+
+def parse_tui_chat_argv(argv: list[str]) -> dict:
+    """解析 chat 命令参数"""
+    result = {
+        "user_id": "cli",
+        "session_id": None,
+        "message": None,
+        "force_think": False,
+        "force_search": False,
+        "verbose": False,
+        "show_usage": False,
+    }
+
+    tokens = argv[1:]
+    i = 0
+
+    while i < len(tokens):
+        token = tokens[i]
+
+        if token == "chat":
+            i += 1
+            continue
+
+        if token in ("-m", "--message") and i + 1 < len(tokens):
+            result["message"] = tokens[i + 1]
+            i += 2
+            continue
+
+        if token == "--user-id" and i + 1 < len(tokens):
+            result["user_id"] = tokens[i + 1]
+            i += 2
+            continue
+
+        if token == "--session-id" and i + 1 < len(tokens):
+            result["session_id"] = tokens[i + 1]
+            i += 2
+            continue
+
+        if token == "--think":
+            result["force_think"] = True
+            i += 1
+            continue
+
+        if token == "--search":
+            result["force_search"] = True
+            i += 1
+            continue
+
+        if token == "--verbose":
+            result["verbose"] = True
+            i += 1
+            continue
+
+        if token == "--usage":
+            result["show_usage"] = True
+            i += 1
+            continue
+
+        i += 1
+
+    return result
+
+
+def is_bare_root_argv(argv: list[str]) -> bool:
+    """
+    检测是否是裸根命令（无子命令）
+
+    对标 OpenClaw: 直接运行 openclaw → 进入 Crestodian 交互
+    miniclaw → 直接进入 TUI chat
+    """
+    # 只有程序名，或只有全局选项
+    tokens = argv[1:]
+    if not tokens:
+        return True
+    # 只有全局选项（如 --no-color）
+    return all(t in ROOT_OPTIONS for t in tokens)
+
+
 async def run_cli(argv=None):
     if argv is None: argv = sys.argv
     startup_trace = StartupTrace()
+
+    # 1. Gateway run 快径
     if await try_run_gateway_run_fast_path(argv, startup_trace):
         return
 
+    # 2. TUI chat 命令（对标 OpenClaw: openclaw chat）
+    if is_tui_chat_argv(argv):
+        params = parse_tui_chat_argv(argv)
+        from tui.tui_app import run_tui
+        await run_tui(**params)
+        return
+
+    # 3. 旧版 agent chat 命令（兼容）
     from cli.agent_chat import is_agent_chat_argv, parse_agent_chat_argv, run_agent_chat
     if is_agent_chat_argv(argv):
         params = parse_agent_chat_argv(argv)
         await run_agent_chat(**params)
+        return
+
+    # 4. 裸根命令 → 直接进入 TUI（对标 OpenClaw 的 Crestodian 行为）
+    if is_bare_root_argv(argv):
+        from tui.tui_app import run_tui
+        await run_tui()
         return
 
     print("[run_main] 慢速路径暂未实现（第2章完成）", file=sys.stderr)
