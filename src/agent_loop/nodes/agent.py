@@ -59,6 +59,10 @@ def _get_agent_system_prompt(agent_name: str, state: AgenticLoopState) -> str:
     return prompt
 
 
+# 缓存已反序列化的 SkillsSnapshot，避免每轮循环重复 from_dict 开销
+_snapshot_cache: dict[str, Any] = {}
+
+
 def _get_tools_from_snapshot(state: AgenticLoopState) -> List:
     """
     从冻结的 Skills Snapshot 中加载工具
@@ -72,7 +76,7 @@ def _get_tools_from_snapshot(state: AgenticLoopState) -> List:
 
     流程：
     1. 从 state 中读取 skills_snapshot（dict）
-    2. 反序列化为 SkillsSnapshot 对象
+    2. 反序列化为 SkillsSnapshot 对象（带缓存，避免每轮重复反序列化）
     3. 只加载 snapshot 中声明的工具（tool_names）
     4. 如果 snapshot 不存在，fallback 到实时扫描（兼容旧逻辑）
     """
@@ -86,7 +90,16 @@ def _get_tools_from_snapshot(state: AgenticLoopState) -> List:
         tools, _ = _get_tools_for_agent_legacy(current_agent)
         return tools
 
-    snapshot = SkillsSnapshot.from_dict(snapshot_dict)
+    # 使用 version 作为缓存键，version 不变则复用
+    cache_key = str(snapshot_dict.get("version", ""))
+    cached = _snapshot_cache.get(cache_key)
+    if cached is not None:
+        snapshot = cached
+    else:
+        snapshot = SkillsSnapshot.from_dict(snapshot_dict)
+        _snapshot_cache.clear()  # 只保留最新版本
+        _snapshot_cache[cache_key] = snapshot
+
     tools = []
     for tool_name in snapshot.tool_names:
         tool = _try_load_tool(tool_name)
@@ -184,12 +197,13 @@ async def agent_reason_node(state: AgenticLoopState) -> Dict[str, Any]:
     tools = _get_tools_from_snapshot(state)
 
     # 注入 snapshot 的 prompt 到系统提示（对标 OpenClaw skillsSnapshot.prompt）
-    from agent_loop.skills_snapshot import SkillsSnapshot
+    # 复用 _get_tools_from_snapshot 中的缓存，避免重复反序列化
     snapshot_dict = state.get("skills_snapshot")
     if snapshot_dict:
-        snapshot = SkillsSnapshot.from_dict(snapshot_dict)
-        if snapshot.prompt:
-            system_prompt += f"\n\n{snapshot.prompt}"
+        cache_key = str(snapshot_dict.get("version", ""))
+        cached_snapshot = _snapshot_cache.get(cache_key)
+        if cached_snapshot and cached_snapshot.prompt:
+            system_prompt += f"\n\n{cached_snapshot.prompt}"
 
     metadata = state.get("metadata") or {}
     if metadata.get("force_think"):
