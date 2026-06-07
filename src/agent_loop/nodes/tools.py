@@ -86,17 +86,20 @@ async def _execute_single_tool(tool_name: str, tool_args: Dict[str, Any]) -> str
         return f"Error: Tool '{tool_name}' not found"
 
     try:
+        # 统一使用 ainvoke 异步接口，LangChain 工具的 ainvoke 会自动处理参数格式
         if hasattr(tool, "ainvoke"):
             result = await tool.ainvoke(tool_args)
         elif hasattr(tool, "func"):
-            import asyncio
             import inspect
             if inspect.iscoroutinefunction(tool.func):
                 result = await tool.func(**tool_args)
             else:
-                result = await asyncio.to_thread(tool.invoke, tool_args)
+                result = await asyncio.to_thread(tool.func, **tool_args)
+        elif hasattr(tool, "invoke"):
+            # 同步 invoke 放到线程中执行，避免阻塞事件循环
+            result = await asyncio.to_thread(tool.invoke, tool_args)
         else:
-            result = tool.invoke(tool_args)
+            return f"Error: Tool '{tool_name}' has no invoke method"
 
         if isinstance(result, str):
             return result
@@ -144,6 +147,7 @@ async def tool_execute_node(state: AgenticLoopState) -> Dict[str, Any]:
     tool_messages: List[ToolMessage] = []
     loop_breaker_tripped = False
     loop_breaker_reason = None
+    all_skipped = True  # 跟踪是否所有工具调用都被循环检测跳过
 
     for tool_call in tool_calls:
         tool_name = _extract_tool_name(tool_call)
@@ -176,6 +180,9 @@ async def tool_execute_node(state: AgenticLoopState) -> Dict[str, Any]:
                     ))
                     continue
 
+        # 至少有一个工具未被循环检测拦截
+        all_skipped = False
+
         logger.info(f"Executing tool: {tool_name} with args: {list(tool_args.keys())}")
         result = await _execute_single_tool(tool_name, tool_args)
 
@@ -197,6 +204,12 @@ async def tool_execute_node(state: AgenticLoopState) -> Dict[str, Any]:
             timestamp=datetime.now().isoformat(),
             iteration=loop_iteration,
         ))
+
+    # 如果所有工具调用都被循环检测跳过，设置断路器强制结束循环
+    if all_skipped and tool_messages:
+        loop_breaker_tripped = True
+        loop_breaker_reason = "所有工具调用均被循环检测拦截"
+        logger.warning(f"All tool calls skipped by loop detection: {loop_breaker_reason}")
 
     updates: Dict[str, Any] = {
         "messages": tool_messages,
