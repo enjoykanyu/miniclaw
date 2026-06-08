@@ -59,12 +59,13 @@ def print_banner(console: Console) -> None:
 
     commit = _get_short_commit()
 
-    # 对标 OpenClaw 的 ASCII Art banner
-    # 使用 Unicode 块字符绘制 "MINICLAW"
+    # 紧凑型 ASCII Art banner，适配窄终端
     art_lines = [
-        "█▀▀█ █▀▀█ █  █ █▀▀▀ █▄█ █  █ █▀▀█ █   █▀▀█",
-        "█▀▀▀ █  █ █▄▄█ █▄▄  █ █ █  █ █▄▄█ █   █  █",
-        "█    █▄▄█ █  █ █▄▄▄ █   █▄▄█ █  █ █▄█ █▄▄█",
+        r" __  __ ___ _   _ ___ ____ _        ___        __",
+        r"|  \/  |_ _| \ | |_ _/ ___| |      / \ \      / /",
+        r"| |\/| || ||  \| || | |   | |     / _ \ \ /\ / / ",
+        r"| |  | || || |\  || | |___| |___ / ___ \ V  V /  ",
+        r"|_|  |_|___|_| \_|___\____|_____/_/   \_\_/\_/   ",
     ]
 
     # 着色：对标 OpenClaw 的 accentBright/accentDim/accent 主题
@@ -73,12 +74,10 @@ def print_banner(console: Console) -> None:
         if i > 0:
             styled_art.append("\n")
         for ch in line:
-            if ch == "█":
+            if ch in "_|/\\":
                 styled_art.append(ch, style="bold bright_cyan")
-            elif ch == "▀":
-                styled_art.append(ch, style="cyan")
-            elif ch == "▄":
-                styled_art.append(ch, style="dim cyan")
+            elif ch.isalpha() or ch.isdigit():
+                styled_art.append(ch, style="bold white")
             else:
                 styled_art.append(ch, style="dim")
 
@@ -86,7 +85,7 @@ def print_banner(console: Console) -> None:
     banner_text = Text()
     banner_text.append(styled_art)
     banner_text.append("\n\n")
-    banner_text.append("  MiniClaw", style="bold bright_cyan")
+    banner_text.append("  Mini Claw", style="bold bright_cyan")
     banner_text.append(f" v{VERSION}", style="dim")
     banner_text.append(f" ({commit})", style="dim bright_black")
     banner_text.append("\n")
@@ -108,7 +107,7 @@ def print_banner_line(console: Console) -> None:
 
     commit = _get_short_commit()
     line = Text()
-    line.append("MiniClaw", style="bold bright_cyan")
+    line.append("Mini Claw", style="bold bright_cyan")
     line.append(f" {VERSION}", style="dim")
     line.append(f" ({commit})", style="bright_black")
     line.append(" — ", style="dim")

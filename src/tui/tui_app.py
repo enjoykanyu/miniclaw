@@ -214,9 +214,19 @@ class MiniClawTUI:
         if self._app is not None:
             return
         try:
+            # 静默 loguru，避免日志和 Rich Live 交织导致 banner 被覆盖
+            import loguru
+            loguru.logger.disable("agent_loop")
+            loguru.logger.disable("gateway")
+            loguru.logger.disable("mcp")
+            loguru.logger.disable("memory")
+            loguru.logger.disable("tools")
+            loguru.logger.disable("session")
+            loguru.logger.disable("skills")
+            loguru.logger.disable("channel")
+
             from agent_loop.app import AgenticLoopApp
             self._app = AgenticLoopApp()
-            self.console.print("[dim]Agent Loop 已初始化[/dim]")
         except Exception as e:
             self.console.print(f"[bold red]Agent 初始化失败: {e}[/bold red]")
             raise
@@ -231,17 +241,15 @@ class MiniClawTUI:
         """
         # Banner
         try:
-            terminal_width = self.console.width
-            if terminal_width >= 60:
-                print_banner(self.console)
-            else:
-                print_banner_line(self.console)
+            print_banner(self.console)
         except Exception:
             print_banner_line(self.console)
 
-        # 初始化 Agent
+        # 初始化 Agent（静默日志，避免覆盖 banner）
         with self.console.status("[cyan]正在初始化 Agent...[/cyan]"):
             await self._init_agent()
+        self.console.print("[dim]Agent 已就绪[/dim]")
+        self.console.print()
 
         # 创建 prompt session
         self._prompt_session = self._create_prompt_session()
