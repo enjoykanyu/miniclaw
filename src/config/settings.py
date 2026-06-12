@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     LLM_API_KEY: Optional[str] = Field(default=None)
     LLM_BASE_URL: Optional[str] = Field(default=None)
     LLM_MODEL: str = Field(default="gpt-4o")
+    LLM_EXTRA_API_KEYS: str = Field(default="", description="额外 API Keys（逗号分隔），用于 Key 轮换")
     OPENAI_API_KEY: Optional[str] = Field(default=None)
     OPENAI_BASE_URL: Optional[str] = Field(default=None)
     OPENAI_MODEL: str = Field(default="gpt-4o")
@@ -52,11 +53,20 @@ class Settings(BaseSettings):
     SKILLS_WATCH_DEBOUNCE_MS: int = Field(default=250)
     SKILLS_PROMPT_MAX_CHARS: int = Field(default=8000)
 
+    GATEWAY_AGENT_MAX_CONCURRENT: int = Field(default=3, description="Main lane 最大并发数")
+    GATEWAY_SUBAGENT_MAX_CONCURRENT: int = Field(default=2, description="Subagent lane 最大并发数")
+
     SESSION_RESET_MODE: str = Field(default="daily", description="Session reset mode: daily/idle")
     SESSION_RESET_AT_HOUR: int = Field(default=4)
     SESSION_IDLE_MINUTES_DM: int = Field(default=1440)
     SESSION_IDLE_MINUTES_GROUP: int = Field(default=240)
     SESSION_PRUNE_MAX_AGE_HOURS: int = Field(default=24)
+
+    ACP_ENABLED: bool = Field(default=False, description="是否启用 ACP (Agent Client Protocol) 服务器")
+    ACP_PORT: int = Field(default=18790, description="ACP 服务器端口")
+
+    CRON_ENABLED: bool = Field(default=False, description="是否启用 Cron 定时任务服务")
+    CRON_STORE_PATH: str = Field(default="cron_jobs.json", description="Cron 任务存储文件路径")
 
     @property
     def effective_api_key(self) -> Optional[str]:
