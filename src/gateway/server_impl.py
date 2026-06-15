@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Callable, Awaitable, Any
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,6 +52,9 @@ from gateway.gates import (
     authorize_gateway_method,
 )
 from gateway.config_reload import _watch_config_reload
+from gateway.graceful_shutdown import (
+    get_shutdown_manager,
+)
 
 
 # ──────────────────────────────────────────────────────────
@@ -73,6 +76,7 @@ class AgentRunRequest(BaseModel):
     force_search: bool = False
     selected_kbs: list[str] | None = None
     kb_retrieval_mode: str = "intent"
+    run_id: str = ""  # 幂等性去重键，对标 OpenClaw runId
 
 
 class AgentRunResponse(BaseModel):
@@ -132,7 +136,6 @@ class GatewayServer:
         await self._close(reason)
 
     async def start(self):
-        # ... 启动所有通道后 ...
         self._health_monitor.start()
 
     async def shutdown(self):
@@ -147,8 +150,18 @@ class GatewayServer:
 # 配置加载（与 aiohttp 版完全相同）
 # ──────────────────────────────────────────────────────────
 
+def _resolve_config_path() -> Path:
+    """解析配置文件路径，优先使用环境变量，回退到项目根目录"""
+    env_path = os.environ.get("MINICLAW_CONFIG_PATH")
+    if env_path:
+        return Path(env_path)
+    # 项目根目录（src 的上级目录）
+    project_root = Path(__file__).parent.parent
+    return project_root / "openclaw.json"
+
+
 async def _load_config_snapshot() -> dict:
-    config_path = Path("openclaw.json")
+    config_path = _resolve_config_path()
     if not config_path.exists():
         return _default_config()
     raw = config_path.read_text(encoding="utf-8")
@@ -209,6 +222,10 @@ async def _resolve_runtime_config(cfg: dict) -> RuntimeConfig:
     )
 
 
+# ──────────────────────────────────────────────────────────
+# 帧协议（与 aiohttp 版完全相同，这是业务逻辑不依赖框架）
+# ──────────────────────────────────────────────────────────
+
 _METHOD_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$")
 
 
@@ -258,15 +275,30 @@ def _parse_and_validate_frame(data: str) -> dict:
         return {"valid": False, "error": f"unknown frame type: {frame_type!r}"}
 
 
+# ──────────────────────────────────────────────────────────
+# 方法注册表（与 aiohttp 版完全相同）
+# ──────────────────────────────────────────────────────────
+
 _METHOD_REGISTRY: dict[str, dict] = {}
+_METHOD_REGISTRY_LOCK = asyncio.Lock()
+_METHOD_REGISTRY_SEALED = False  # 启动完成后封印，运行时只读
 
 
 def register_method(name: str, handler, *, required_role: str = "user", required_scopes: list[str] | None = None):
+    """注册方法处理器。启动阶段可写，运行时封印后禁止修改（对标 OpenClaw 启动时一次性注册）。"""
+    if _METHOD_REGISTRY_SEALED:
+        raise RuntimeError(f"Method registry is sealed (runtime read-only). Cannot register '{name}'")
     _METHOD_REGISTRY[name] = {
         "handler": handler,
         "required_role": required_role,
         "required_scopes": required_scopes or [],
     }
+
+
+def seal_method_registry():
+    """封印方法注册表，启动完成后调用，运行时禁止新增方法"""
+    global _METHOD_REGISTRY_SEALED
+    _METHOD_REGISTRY_SEALED = True
 
 
 async def _dispatch_method(frame: dict, auth: dict) -> dict:
@@ -337,6 +369,30 @@ def create_app(runtime_cfg: RuntimeConfig, auth: dict) -> FastAPI:
     app.state.runtime_cfg = runtime_cfg
     app.state.auth = auth
 
+    # ── 优雅关闭中间件 ──
+    # 关闭期间拒绝新请求
+    shutdown_mgr = get_shutdown_manager()
+
+    @app.middleware("http")
+    async def shutdown_middleware(request, call_next):
+        if shutdown_mgr.is_shutting_down:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Server is shutting down"},
+            )
+        # 跟踪在途请求
+        request_id = f"rest-{id(request)}"
+        await shutdown_mgr.add_in_flight_request(request_id)
+        try:
+            response = await call_next(request)
+            return response
+        finally:
+            await shutdown_mgr.remove_in_flight_request(request_id)
+
+    # ── 初始化 Broadcaster（对标 OpenClaw GatewayBroadcaster）──
+    from gateway.broadcast import GatewayBroadcaster
+    app.state.broadcaster = GatewayBroadcaster()
+
     # ══════════════════════════════════════════════════════
     # HTTP REST 路由（新增！aiohttp 版没有）
     #
@@ -389,6 +445,37 @@ def create_app(runtime_cfg: RuntimeConfig, auth: dict) -> FastAPI:
         from gateway.agent_methods import handle_agent_status
         return await handle_agent_status({}, {"ok": True, "role": "user"})
 
+    # ── Chat REST 端点（对标 OpenClaw chat.history / chat.list）──
+
+    @app.get("/api/v1/chat/history", tags=["Chat"])
+    async def rest_chat_history(
+        thread_id: str = Query(default=""),
+        limit: int = Query(default=50, ge=1, le=500),
+    ):
+        """查询会话历史 — 对标 OpenClaw chat.history"""
+        from gateway.chat_history import handle_chat_history
+        return await handle_chat_history(
+            {"thread_id": thread_id, "limit": limit},
+            {"ok": True, "role": "user"},
+        )
+
+    @app.get("/api/v1/chat/list", tags=["Chat"])
+    async def rest_chat_list(agent_id: str = Query(default="default")):
+        """列出所有会话 — 对标 OpenClaw chat.list"""
+        from gateway.chat_history import handle_chat_list
+        return await handle_chat_list(
+            {"agent_id": agent_id},
+            {"ok": True, "role": "user"},
+        )
+
+    # ── OpenAI 兼容接口（对标 OpenClaw /v1/chat/completions）──
+
+    @app.post("/v1/chat/completions", tags=["OpenAI"])
+    async def rest_openai_chat_completions(request: Request):
+        """OpenAI 兼容接口 — 对标 OpenClaw /v1/chat/completions"""
+        from gateway.openai_compat import openai_chat_completions
+        return await openai_chat_completions(request)
+
     # ══════════════════════════════════════════════════════
     # WebSocket 路由（迁移自 aiohttp）
     #
@@ -427,13 +514,36 @@ def create_app(runtime_cfg: RuntimeConfig, auth: dict) -> FastAPI:
         2. 服务端验证 token → 401 或接受连接
         3. 客户端发送 req 帧 → 服务端返回 res 帧
         """
-        # ── 认证（第1闸）──
-        auth_result = authenticate_handshake(token, auth)
-        if not auth_result.get("ok"):
-            await ws.close(code=4001, reason="Unauthorized")
+        # 先 accept 连接，再验证 token
+        # 修复: FastAPI 的 WebSocket 在 accept 之前调用 close 会抛异常
+        # OpenClaw 做法: 先建立连接，发送 challenge，客户端回传后验证
+
+        # ── 关闭期间拒绝新 WebSocket 连接 ──
+        if shutdown_mgr.is_shutting_down:
+            await ws.close(code=1001, reason="Server is shutting down")
             return
 
         await ws.accept()
+
+        # ── 注册 WebSocket 到关闭管理器 ──
+        shutdown_mgr.register_websocket(ws)
+
+        # ── 跟踪在途请求 ──
+        ws_request_id = f"ws-{id(ws)}"
+        await shutdown_mgr.add_in_flight_request(ws_request_id)
+
+        # ── 认证（第1闸）──
+        auth_result = authenticate_handshake(token, auth)
+        if not auth_result.get("ok"):
+            await ws.close(code=4001, reason=f"Unauthorized: {auth_result.get('reason', '')}")
+            return
+
+        # ── 注册到 Broadcaster ──
+        import uuid as _uuid
+        conn_id = f"ws-{_uuid.uuid4().hex[:12]}"
+        broadcaster = getattr(app.state, "broadcaster", None)
+        if broadcaster:
+            await broadcaster.add_client(conn_id, ws, auth_result)
 
         try:
             while True:
@@ -459,6 +569,13 @@ def create_app(runtime_cfg: RuntimeConfig, auth: dict) -> FastAPI:
             pass  # 客户端正常断开
         except Exception as e:
             print(f"[gateway] WebSocket error: {e}", file=sys.stderr)
+        finally:
+            # ── 从 Broadcaster 移除 ──
+            if broadcaster:
+                await broadcaster.remove_client(conn_id)
+            # ── 从关闭管理器注销 ──
+            shutdown_mgr.unregister_websocket(ws)
+            await shutdown_mgr.remove_in_flight_request(ws_request_id)
 
     # ══════════════════════════════════════════════════════
     # WebUI 静态文件（新增！aiohttp 版没有）
@@ -576,11 +693,22 @@ async def start_gateway_server(
     except Exception as e:
         print(f"[gateway] Warning: Agent methods registration failed: {e}", file=sys.stderr)
 
+    try:
+        from gateway.chat_history import register_chat_methods
+        register_chat_methods()
+        print("[gateway] Chat methods registered (chat.history, chat.list)")
+    except Exception as e:
+        print(f"[gateway] Warning: Chat methods registration failed: {e}", file=sys.stderr)
+
     print("[gateway] Phase 9: 后附加运行时")
     await trace.measure("runtime.post-attach", lambda: _start_post_attach_runtime(app, runtime_cfg, early_runtime))
 
+    # 封印方法注册表：启动阶段结束，运行时禁止新增方法（对标 OpenClaw 启动时一次性注册）
+    seal_method_registry()
+    print(f"[gateway] Method registry sealed: {len(_METHOD_REGISTRY)} methods registered")
+
     print("[gateway] Phase 10: 配置热重载")
-    config_path = str(Path("openclaw.json"))
+    config_path = str(_resolve_config_path())
     runtime = {"app": app, "cfg": cfg, "auth": auth, "early_runtime": early_runtime}
     asyncio.create_task(_watch_config_reload(config_path, runtime))
 
@@ -592,11 +720,53 @@ async def start_gateway_server(
 
     shutdown_event = asyncio.Event()
 
+    # ── 初始化优雅关闭管理器 ──
+    shutdown_mgr = get_shutdown_manager()
+
+    # 先创建 GatewayServer（close 函数稍后赋值）
+    server = GatewayServer(close=lambda reason="shutdown": None, runtime=runtime)
+
+    # 注册关闭处理器
+    channel_store = server._channel_store
+    health_monitor = server._health_monitor
+
+    async def _close_channels():
+        """关闭 Channel"""
+        try:
+            channel_store.stop_all()
+        except Exception as e:
+            logger.error(f"Close channels failed: {e}")
+
+    async def _stop_health_monitor():
+        """停止健康监控"""
+        try:
+            health_monitor.stop()
+        except Exception as e:
+            logger.error(f"Stop health monitor failed: {e}")
+
+    async def _stop_config_reload():
+        """停止配置热重载（由 _watch_config_reload 的 CancelledError 处理）"""
+        logger.info("Config reload will stop on task cancellation")
+
+    async def _close_http_server():
+        """关闭 HTTP 服务器"""
+        uv_server.should_exit = True
+
+    shutdown_mgr.register_handler("close_channels", _close_channels, priority=10)
+    shutdown_mgr.register_handler("stop_health_monitor", _stop_health_monitor, priority=20)
+    shutdown_mgr.register_handler("stop_config_reload", _stop_config_reload, priority=30)
+    shutdown_mgr.register_handler("close_http_server", _close_http_server, priority=40)
+
+    # 注册信号处理器
+    shutdown_mgr.setup_signal_handlers()
+
     async def close(reason: str = "shutdown") -> None:
-        print(f"[gateway] Closing: {reason}")
+        """触发优雅关闭"""
+        await shutdown_mgr.shutdown(reason)
         shutdown_event.set()
 
-    server = GatewayServer(close=close, runtime=runtime)
+    # 更新 server 的 close 方法
+    server._close = close
 
     # 启动 uvicorn（在后台运行）
     uv_config = uvicorn.Config(
