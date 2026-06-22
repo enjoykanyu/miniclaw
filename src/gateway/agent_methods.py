@@ -2,7 +2,7 @@
 Gateway Agent Methods
 
 对标 OpenClaw 的 Gateway Agent 集成：
-  - agent.run: 执行 Agentic Loop 推理
+  - agent.run: 执行 Agentic Loop 推理（含 runId 幂等去重）
   - agent.list: 列出可用 Agent
   - agent.status: 查询 Agent 状态
 
@@ -10,10 +10,12 @@ Gateway Agent Methods
 通过 WebSocket 帧协议 (req/res/event) 提供服务。
 """
 
+import time
 from typing import Any, Dict, Optional
 from loguru import logger
 
 from agent_loop.app import AgenticLoopApp
+from gateway.lanes import CommandLane, get_lane_manager
 
 
 _loop_app: Optional[AgenticLoopApp] = None
@@ -77,35 +79,80 @@ async def handle_agent_run(params: dict, auth: dict) -> dict:
     force_search = params.get("force_search", False)
     selected_kbs = params.get("selected_kbs")
     kb_retrieval_mode = params.get("kb_retrieval_mode", "intent")
+    run_id = params.get("run_id", "")
+
+    # ── runId 幂等去重（对标 OpenClaw DedupeCache）──
+    if run_id:
+        from gateway.dedupe import resolve_global_dedupe_cache
+        dedupe = resolve_global_dedupe_cache()
+        now = time.time()
+        cached = dedupe.peek(run_id, now)
+        if cached is not None:
+            logger.info(f"agent.run: dedupe hit for run_id={run_id}, returning cached result")
+            return cached
 
     logger.info(f"agent.run: message={message[:50]}... user={user_id}")
 
     try:
         app = get_loop_app()
-        response = await app.chat(
-            message=message,
-            user_id=user_id,
-            session_id=session_id,
-            thread_id=thread_id,
-            force_think=force_think,
-            force_search=force_search,
-            selected_kbs=selected_kbs,
-            kb_retrieval_mode=kb_retrieval_mode,
+        session_key = f"{user_id}:{session_id}"
+
+        # ── 通过 Main Lane 执行，实现会话级并发控制 ──
+        lane_manager = get_lane_manager()
+
+        async def _run_agent():
+            return await app.chat(
+                message=message,
+                user_id=user_id,
+                session_id=session_id,
+                thread_id=thread_id,
+                force_think=force_think,
+                force_search=force_search,
+                selected_kbs=selected_kbs,
+                kb_retrieval_mode=kb_retrieval_mode,
+            )
+
+        response = await lane_manager.enqueue_command_in_lane(
+            lane=CommandLane.MAIN,
+            session_key=session_key,
+            coro=_run_agent(),
         )
 
-        return {
+        result = {
             "response": response,
             "agent": "agentic_loop",
             "status": "completed",
         }
 
+        # ── 缓存结果到 DedupeCache（对标 OpenClaw runId 去重）──
+        if run_id:
+            try:
+                from gateway.dedupe import resolve_global_dedupe_cache
+                dedupe = resolve_global_dedupe_cache()
+                dedupe.check(run_id, time.time(), value=result)
+            except Exception:
+                pass
+
+        return result
+
     except Exception as e:
         logger.error(f"agent.run failed: {e}", exc_info=True)
-        return {
+        error_result = {
             "response": f"处理请求时出现错误: {str(e)[:100]}",
             "error": str(e),
             "status": "failed",
         }
+
+        # ── 错误结果也缓存（防止重复失败请求）──
+        if run_id:
+            try:
+                from gateway.dedupe import resolve_global_dedupe_cache
+                dedupe = resolve_global_dedupe_cache()
+                dedupe.check(run_id, time.time(), value=error_result)
+            except Exception:
+                pass
+
+        return error_result
 
 
 async def handle_agent_list(params: dict, auth: dict) -> dict:
