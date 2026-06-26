@@ -397,80 +397,92 @@ class TestRetriever:
 
 
 class TestSkills:
-    """技能系统测试"""
-    
-    def test_skill_config_singleton(self):
-        """测试技能配置单例"""
-        from miniclaw.skills import SkillConfig
-        
-        c1 = SkillConfig()
-        c2 = SkillConfig()
-        
-        assert c1 is c2
-    
-    def test_skill_enable_disable(self):
-        """测试技能启用/禁用"""
-        from miniclaw.skills import skill_config
-        
-        skill_config.enable_skill("weather")
-        assert skill_config.is_skill_enabled("weather") == True
-        
-        skill_config.disable_skill("weather")
-        assert skill_config.is_skill_enabled("weather") == False
-        
-        skill_config.enable_skill("weather")
-    
-    def test_get_enabled_skills(self):
-        """测试获取启用的技能"""
-        from miniclaw.skills import get_enabled_skills
-        
-        skills = get_enabled_skills()
+    """技能系统测试 - 统一使用 SKILL.md + SkillRegistry"""
+
+    def test_skill_registry_singleton(self):
+        """测试技能注册表单例"""
+        from miniclaw.skills import skill_registry, SkillRegistry
+
+        r1 = SkillRegistry()
+        r2 = SkillRegistry()
+
+        assert r1 is r2
+
+    def test_skill_loader_load_all(self):
+        """测试技能加载器加载所有 SKILL.md"""
+        from miniclaw.skills import SkillLoader
+
+        loader = SkillLoader()
+        skills = loader.load_all()
+
         assert isinstance(skills, list)
-    
-    def test_weather_skill(self):
-        """测试天气技能"""
-        from miniclaw.skills import WeatherSkill
-        
-        result = WeatherSkill.get_suggestion("Beijing")
-        assert isinstance(result, str)
-    
-    def test_summary_skill(self):
-        """测试总结技能"""
-        from miniclaw.skills import SummarySkill
-        
-        text = "这是一段测试文本。用于测试总结功能。"
-        summary = SummarySkill.summarize_text(text, max_length=50)
+        assert len(skills) > 0
+
+        skill_names = [s.name for s in skills]
+        assert "web_search" in skill_names
+        assert "weather" in skill_names
+
+    def test_skill_registry_load_all(self):
+        """测试技能注册表加载"""
+        from miniclaw.skills import skill_registry
+
+        skill_registry.load_all()
+
+        web_search = skill_registry.get("web_search")
+        assert web_search is not None
+        assert web_search.name == "web_search"
+
+    def test_skill_get_for_agent(self):
+        """测试按 Agent 获取技能"""
+        from miniclaw.skills import skill_registry
+
+        skill_registry.load_all()
+
+        info_skills = skill_registry.get_for_agent("info")
+        assert isinstance(info_skills, list)
+
+        info_skill_names = [s.name for s in info_skills]
+        assert "web_search" in info_skill_names
+        assert "weather" in info_skill_names
+
+    def test_skill_build_summary(self):
+        """测试构建技能目录摘要（渐进式披露 Level 1）"""
+        from miniclaw.skills import skill_registry
+
+        skill_registry.load_all()
+
+        summary = skill_registry.build_skills_summary("info")
         assert isinstance(summary, str)
-    
-    def test_emotion_skill(self):
-        """测试情感技能"""
-        from miniclaw.skills import EmotionSkill
-        
-        result = EmotionSkill.analyze("今天真开心")
-        assert "sentiment" in result
-        assert "score" in result
-    
-    def test_joke_skill(self):
-        """测试笑话技能"""
-        from miniclaw.skills import JokeSkill
-        
-        joke = JokeSkill.get_joke()
-        assert isinstance(joke, str)
-        
-        riddle = JokeSkill.get_riddle()
-        assert "question" in riddle
-        assert "answer" in riddle
-    
-    def test_calendar_skill(self):
-        """测试日历技能"""
-        from miniclaw.skills import CalendarSkill
-        
-        today = CalendarSkill.get_today()
-        assert "date" in today
-        assert "weekday" in today
-        
-        holidays = CalendarSkill.get_holidays(2024)
-        assert isinstance(holidays, list)
+        assert "web_search" in summary
+        assert "weather" in summary
+
+    def test_skill_get_content_lazy_load(self):
+        """测试技能内容延迟加载（渐进式披露 Level 2）"""
+        from miniclaw.skills import skill_registry
+
+        skill_registry.load_all()
+
+        web_search = skill_registry.get("web_search")
+        assert web_search.content is None
+
+        content = skill_registry.get_skill_content("web_search")
+        assert content is not None
+        assert len(content) > 0
+
+        web_search_again = skill_registry.get("web_search")
+        assert web_search_again.content is not None
+
+    def test_skill_tool_def(self):
+        """测试技能工具定义"""
+        from miniclaw.skills import skill_registry
+
+        skill_registry.load_all()
+
+        web_search = skill_registry.get("web_search")
+        assert len(web_search.tools) > 0
+        assert web_search.tools[0].name == "tavily"
+        assert web_search.tools[0].condition == "force_search"
+        assert web_search.tools[0].required == True
 
 
 class TestGraph:

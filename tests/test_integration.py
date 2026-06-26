@@ -295,37 +295,39 @@ class TestRAGIntegration:
 
 
 class TestSkillIntegration:
-    """技能集成测试"""
-    
-    def test_skill_registry(self):
-        """测试技能注册"""
+    """技能集成测试 - 统一使用 SKILL.md + SkillRegistry"""
+
+    def test_skill_registry_load(self):
+        """测试技能注册表加载"""
         from miniclaw.skills import skill_registry
-        
-        skills = skill_registry.list_skills()
-        assert isinstance(skills, list)
-    
-    def test_skill_execution(self):
-        """测试技能执行"""
+
+        skill_registry.load_all()
+
+        web_search = skill_registry.get("web_search")
+        assert web_search is not None
+        assert web_search.name == "web_search"
+
+    def test_skill_content_progressive_disclosure(self):
+        """测试渐进式披露：启动时 content 为 None，按需加载"""
         from miniclaw.skills import skill_registry
-        
-        weather_skill = skill_registry.get("weather")
-        if weather_skill:
-            assert "get_weather" in weather_skill.functions
-    
-    def test_skill_config_workflow(self):
-        """测试技能配置工作流"""
-        from miniclaw.skills import skill_config
-        
-        original_state = skill_config.is_skill_enabled("joke")
-        
-        skill_config.disable_skill("joke")
-        assert skill_config.is_skill_enabled("joke") == False
-        
-        skill_config.enable_skill("joke")
-        assert skill_config.is_skill_enabled("joke") == True
-        
-        if not original_state:
-            skill_config.disable_skill("joke")
+
+        skill_registry.load_all()
+
+        web_search = skill_registry.get("web_search")
+        assert web_search.content is None
+
+        content = skill_registry.get_skill_content("web_search")
+        assert content is not None
+
+    def test_skill_summary_for_agent(self):
+        """测试按 Agent 构建技能目录摘要"""
+        from miniclaw.skills import skill_registry
+
+        skill_registry.load_all()
+
+        summary = skill_registry.build_skills_summary("info")
+        assert isinstance(summary, str)
+        assert len(summary) > 0
 
 
 if __name__ == "__main__":
