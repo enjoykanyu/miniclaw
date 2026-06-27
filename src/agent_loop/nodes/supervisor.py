@@ -9,6 +9,9 @@ Supervisor Node
 LangGraph 中 supervisor 是路由中枢，
 通过 state.next_agent 字段决定路由目标。
 条件边 _route_from_supervisor 读取 next_agent 决定下一步。
+
+注意：supervisor_node 仅通过 state 字段（next_agent / current_agent）传递路由决策，
+不使用 LangGraph 的 Command(goto=...)，以避免与条件边机制冲突。
 """
 
 from typing import Dict, Any, List, Optional
