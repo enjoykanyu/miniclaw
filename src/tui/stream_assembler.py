@@ -1,7 +1,7 @@
 """
 StreamAssembler — 流式响应组装器
 
-对标 OpenClaw 的 TuiStreamAssembler (tui-stream-assembler.ts)：
+TuiStreamAssembler (tui-stream-assembler.ts)：
   - 增量 delta 组装
   - thinking/content 分离
   - 边界文本处理

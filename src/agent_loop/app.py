@@ -1,5 +1,5 @@
 """
-Agentic Loop App — 对标 OpenClaw 的 agentCommand 入口
+Agentic Loop App — agentCommand 入口
 
 核心职责：
   1. 构建 LangGraph Agentic Loop 图
@@ -7,7 +7,7 @@ Agentic Loop App — 对标 OpenClaw 的 agentCommand 入口
   3. 管理模型降级（Model Fallback）
   4. 会话生命周期管理
 
-对标 OpenClaw 的三层架构：
+三层架构：
   - agentCommand (入口) → AgenticLoopApp
   - runWithModelFallback (降级) → _run_with_model_fallback
   - runEmbeddedPiAgent (循环) → LangGraph StateGraph
