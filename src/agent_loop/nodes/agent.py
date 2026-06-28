@@ -90,8 +90,12 @@ def _get_tools_from_snapshot(state: AgenticLoopState) -> List:
         tools, _ = _get_tools_for_agent_legacy(current_agent)
         return tools
 
-    # 使用 version 作为缓存键，version 不变则复用
-    cache_key = str(snapshot_dict.get("version", ""))
+    # 使用 (version, tool_names) 作为缓存键：仅 version 在不同 agent 间会冲突，
+    # 加上 tool_names 才能区分不同 agent 的 snapshot，避免加载到错误工具集
+    cache_key = (
+        str(snapshot_dict.get("version", "")),
+        tuple(snapshot_dict.get("tool_names", []) or []),
+    )
     cached = _snapshot_cache.get(cache_key)
     if cached is not None:
         snapshot = cached
@@ -217,10 +221,17 @@ async def agent_reason_node(state: AgenticLoopState) -> Dict[str, Any]:
 
     try:
         from mcp.tools import mcp_tool_registry
+        from langchain_core.tools import BaseTool
         mcp_tools = mcp_tool_registry.get_all_tools()
-        tools.extend(mcp_tools)
-    except Exception:
-        pass
+        valid_mcp = [t for t in mcp_tools if isinstance(t, BaseTool)]
+        if len(valid_mcp) < len(mcp_tools):
+            logger.warning(
+                f"Skipped {len(mcp_tools) - len(valid_mcp)} non-LangChain MCP tools "
+                f"(MCPToolProxy is a stub, not bindable)"
+            )
+        tools.extend(valid_mcp)
+    except Exception as e:
+        logger.warning(f"MCP tools load failed: {e}")
 
     messages = list(state.get("messages", []))
     full_messages = [SystemMessage(content=system_prompt)] + messages
