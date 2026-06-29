@@ -235,6 +235,10 @@ class AgenticLoopApp:
         # 使用深拷贝，避免压缩操作污染原始状态
         current_state = copy.deepcopy(initial_state)
 
+        # 工具循环检测器是模块级全局，跨请求累积会污染后续用户，每次请求重置
+        from agent_loop.nodes.tools import _loop_detector
+        _loop_detector.reset()
+
         # ── 收集 API Keys 用于轮换 ──
         api_keys = collect_provider_api_keys()
 
@@ -321,7 +325,7 @@ class AgenticLoopApp:
 
             if tavily_key:
                 from tools.tavily import _search_tavily
-                result = await asyncio.to_thread(_search_tavily, query, 5, tavily_key)
+                result = await _search_tavily(query, 5)
                 logger.info(f"Force search (Tavily) for: {query}, result length: {len(result)}")
                 return result
 
